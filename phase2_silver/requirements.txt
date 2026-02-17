@@ -1,0 +1,2 @@
+# Python 3.13+ required
+watchdog>=3.0.0
