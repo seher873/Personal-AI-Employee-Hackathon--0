@@ -1,0 +1,17 @@
+# Python 3.13+ required
+# Core dependencies
+watchdog>=3.0.0
+requests
+python-dotenv
+
+# Playwright for browser automation
+playwright==1.44.0
+
+# Scheduling
+schedule==1.2.1
+
+# Google API (optional, for Gmail integration)
+google-api-python-client==2.190.0
+
+# Process management (optional)
+pm2==1.0.0

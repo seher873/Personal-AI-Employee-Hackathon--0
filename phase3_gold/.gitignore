@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+.env
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+Logs/
+
+# Sessions
+*_session/
+*.json
+
+# Screenshots
+Screenshots/
+
+# Processed
+Processed/
+Inbox/
+Needs_Action/
+Done/
+
+# Audit
+Audit_Log.md
+CEO_Briefing.md
+
+# Lock files
+package-lock.json
+uv.lock
