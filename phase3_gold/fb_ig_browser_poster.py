@@ -476,7 +476,7 @@ def main():
         # Launch browser in persistent context
         browser = p.chromium.launch_persistent_context(
             user_data_dir=str(SESSION_DIR),
-            headless=False,  # Visible browser for human-like interaction
+            headless=True,  # Headless mode for automated operation
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox'

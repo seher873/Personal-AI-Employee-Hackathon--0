@@ -203,38 +203,69 @@ class HumanInTheLoop:
     """
     Agent Skill: Human-in-the-Loop Confirmation
     Requires human confirmation for sensitive actions
+    
+    Sensitive actions include:
+    - Posting to social media (linkedin, facebook, instagram, twitter)
+    - Login operations
+    - Batch operations
+    - Financial/revenue-related content
+    - Account security changes
+    - Delete operations
     """
-    
-    SENSITIVE_ACTIONS = ['login', 'batch_post', 'financial', 'account_change', 'delete']
-    
+
+    SENSITIVE_ACTIONS = [
+        'login', 'batch_post', 'financial', 'account_change', 'delete',
+        'post', 'linkedin', 'facebook', 'instagram', 'twitter', 'social'
+    ]
+
     @staticmethod
     def is_sensitive(action: str) -> bool:
         """Check if action requires human confirmation"""
-        return any(kw in action.lower() for kw in HumanInTheLoop.SENSITIVE_ACTIONS)
-    
+        action_lower = action.lower()
+        return any(kw in action_lower for kw in HumanInTheLoop.SENSITIVE_ACTIONS)
+
     @staticmethod
     def confirm(action: str, details: str = "") -> bool:
         """
         Request human confirmation for sensitive action
+        
+        For posting actions, shows the content to be posted.
+        For login actions, warns about credential usage.
         
         Returns: True if confirmed, False if denied
         """
         if AUTO_CONFIRM:
             logger.info(f"⚙️  AUTO_CONFIRM enabled - skipping confirmation for: {action}")
             return True
-        
+
         if not HumanInTheLoop.is_sensitive(action):
             return True
+
+        print("\n" + "=" * 60)
+        print("⚠️  HUMAN APPROVAL REQUIRED")
+        print("=" * 60)
+        print(f"\n📋 Action: {action}")
         
-        print(f"\n⚠️  SENSITIVE ACTION REQUIRES CONFIRMATION")
-        print(f"   Action: {action}")
         if details:
-            print(f"   Details: {details}")
-        print()
+            print(f"\n📝 Details:")
+            # Truncate long details for readability
+            if len(details) > 500:
+                print(f"   {details[:500]}...")
+                print("   (content truncated)")
+            else:
+                print(f"   {details}")
         
-        response = input("   Confirm? (yes/no): ").strip().lower()
-        confirmed = response in ['yes', 'y']
+        print("\n" + "-" * 60)
+        response = input("\n✅ Approve this action? (yes/no): ").strip().lower()
+        confirmed = response in ['yes', 'y', 'ye']
         
+        if confirmed:
+            print("✅ Action APPROVED - proceeding...")
+        else:
+            print("❌ Action DENIED - skipping...")
+        
+        print("=" * 60 + "\n")
+
         return confirmed
 
 
@@ -307,7 +338,7 @@ class ScriptRunner:
         
         # All retries exhausted - graceful skip
         logger.info(f"Gracefully skipping task {task_id} after {MAX_RETRIES} failed attempts")
-        return False, last_error, retries
+        return False, last_error, retries # type: ignore
 
 
 class RalphWiggumLoop:

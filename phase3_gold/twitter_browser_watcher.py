@@ -511,7 +511,7 @@ def main():
         # Launch browser in persistent context
         browser = p.chromium.launch_persistent_context(
             user_data_dir=str(SESSION_DIR),
-            headless=args.headless,  # Visible by default
+            headless=False,  # Visible by default
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',

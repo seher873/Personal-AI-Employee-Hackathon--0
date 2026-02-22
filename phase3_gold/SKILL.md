@@ -1,468 +1,1201 @@
-# Gold Tier Skills - AI Employee Vault
-## Complete Skill Documentation
+# AI Employee Skills - Silver + Gold Tier
+## Complete Agent Skill Documentation with Prompt Templates
 
-**Version:** 1.0.0-Gold (Updated)  
-**Generated:** 2026-02-20  
+**Version:** 2.0.0 (Silver + Gold)
+**Generated:** 2026-02-22
 **Tier:** Gold (Production-Ready)
-
----
-
-## Agent Skills Summary
-
-| Skill | Description | Status |
-|-------|-------------|--------|
-| 🌐 Cross-Domain Routing | Personal (Gmail/WhatsApp) vs Business (LinkedIn/FB/IG/X) | ✅ Active |
-| 🔄 Error Recovery | 3-retry with exponential backoff, graceful skip on fail | ✅ Active |
-| 📋 Audit Logging | Every action/error logged to Audit_Log.md with timestamp | ✅ Active |
-| 👤 Human-in-the-Loop | Confirmation required for sensitive actions | ✅ Active |
-| 🍩 Ralph Wiggum Loop | Strong iterative loop until TASK_COMPLETE | ✅ Active |
-| 📊 Weekly Audit | Automated Sunday briefings with CEO_Briefing.md | ✅ Active |
-| 🔌 MCP Servers | REST API for social posting & audit generation | ✅ Active |
-| 📱 Facebook/Instagram | Playwright browser automation for FB/IG | ✅ Active |
-| 🐦 Twitter/X | Playwright browser automation for X | ✅ Active |
+**Odoo:** Skipped
 
 ---
 
 ## Table of Contents
 
-1. [Core Skills Overview](#core-skills-overview)
-2. [Cross-Domain Orchestration](#cross-domain-orchestration)
-3. [Social Media Platform Skills](#social-media-platform-skills)
-4. [Error Recovery System](#error-recovery-system)
-5. [Audit & Logging](#audit--logging)
-6. [Human-in-the-Loop](#human-in-the-loop)
-7. [Ralph Wiggum Loop](#ralph-wiggum-loop)
-8. [MCP Server Integration](#mcp-server-integration)
-9. [Weekly Audit System](#weekly-audit-system)
+1. [Skill Summary Table](#skill-summary-table)
+2. [Watcher Skills](#watcher-skills)
+3. [Poster Skills](#poster-skills)
+4. [Core Reasoning Skills](#core-reasoning-skills)
+5. [Infrastructure Skills](#infrastructure-skills)
+6. [Scheduling](#scheduling-skill)
 
 ---
 
-## Core Skills Overview
+## Skill Summary Table
 
-| Skill | Description | Status |
-|-------|-------------|--------|
-| Cross-Domain Routing | Personal (Gmail/WhatsApp) vs Business (LinkedIn/FB/IG/X) | ✅ Active |
-| Error Recovery | 3-retry with exponential backoff, graceful skip | ✅ Active |
-| Audit Logging | All actions logged to Audit_Log.md with timestamps | ✅ Active |
-| Human-in-the-Loop | Confirmation for sensitive actions | ✅ Active |
-| Ralph Wiggum Loop | Iterative analysis until TASK_COMPLETE | ✅ Active |
-| Weekly Audit | Automated Sunday briefings | ✅ Active |
-| MCP Servers | REST API for social posting & audit | ✅ Active |
+| # | Skill | Type | Domain | Status |
+|---|-------|------|--------|--------|
+| 1 | Gmail Watcher | Input | Personal | ✅ Active |
+| 2 | WhatsApp Watcher | Input | Personal | ✅ Active |
+| 3 | LinkedIn Watcher | Input | Business | ✅ Active |
+| 4 | Facebook Watcher | Input | Business | ✅ Active |
+| 5 | Instagram Watcher | Input | Business | ✅ Active |
+| 6 | X (Twitter) Watcher | Input | Business | ✅ Active |
+| 7 | LinkedIn Poster | Output | Business | ✅ Active |
+| 8 | Facebook/Instagram Poster | Output | Business | ✅ Active |
+| 9 | X (Twitter) Poster | Output | Business | ✅ Active |
+| 10 | Reasoning Loop (Ralph Wiggum) | Reasoning | All | ✅ Active |
+| 11 | MCP Action | Output | All | ✅ Active |
+| 12 | Human Approval | Gate | All | ✅ Active |
+| 13 | Weekly Audit | Infrastructure | All | ✅ Active |
+| 14 | Error Recovery | Infrastructure | All | ✅ Active |
+| 15 | Logging | Infrastructure | All | ✅ Active |
+| 16 | Cross-Domain Routing | Reasoning | All | ✅ Active |
+| 17 | Scheduling (Cron) | Infrastructure | All | ✅ Active |
 
 ---
 
-## Cross-Domain Orchestration
+## Watcher Skills
 
-### Skill: `ai_orchestrator.py`
+### 1. Gmail Watcher Skill
 
-**Purpose:** Route messages to correct domain handlers
+**File:** `gmail_watcher.py`
+**Domain:** Personal
+**Interval:** 60 seconds
 
-**Domains:**
+#### Description
+Monitors Gmail inbox for new emails, extracts sender, subject, and body, then saves to Inbox folder for processing.
+
+#### Input
+- Gmail credentials (from .env)
+- Persistent browser session
+- Polling interval (default: 60s)
+
+#### Prompt Template for Claude
+
 ```
-┌─────────────────────────────────────────────────────┐
-│                  AI Orchestrator                     │
-├─────────────────────────────────────────────────────┤
-│  📱 PERSONAL DOMAIN        │  💼 BUSINESS DOMAIN    │
-│  ├─ Gmail                  │  ├─ LinkedIn           │
-│  └─ WhatsApp               │  ├─ Facebook           │
-│                            │  ├─ Instagram          │
-│                            │  └─ X (Twitter)        │
-└─────────────────────────────────────────────────────┘
+You are analyzing a new email from Gmail.
+
+EMAIL DATA:
+- From: {{sender_email}}
+- Subject: {{subject}}
+- Received: {{timestamp}}
+- Body: {{email_body}}
+
+TASK:
+1. Classify this email:
+   - Personal (family, friends, personal accounts)
+   - Business (work, clients, professional networks)
+   - Spam/Promotional (ignore these)
+
+2. Extract the intent:
+   - Question (needs response)
+   - Task (action required)
+   - Information (file for reference)
+   - Urgent (immediate attention)
+
+3. Draft a response if needed (for questions)
+
+4. Determine if human approval is required:
+   - First-time sender → YES
+   - Sensitive topic (money, legal, accounts) → YES
+   - Batch action requested → YES
+
+OUTPUT FORMAT:
+{
+  "classification": "personal|business|spam",
+  "intent": "question|task|information|urgent",
+  "requires_approval": true|false,
+  "draft_response": "...",
+  "suggested_action": "...",
+  "priority": "low|medium|high"
+}
 ```
 
-**Features:**
-- Message classification by source/keywords
-- Subprocess routing to watcher/poster scripts
-- Ralph Wiggum loop for each task
-- 3-retry error recovery per message
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_gmail_subject.md`
+- Frontmatter with metadata
+- Classification and suggested action
 
-**Usage:**
+---
+
+### 2. WhatsApp Watcher Skill
+
+**File:** `whatsapp_watcher.py`
+**Domain:** Personal
+**Interval:** 60 seconds
+
+#### Description
+Monitors WhatsApp Web for new messages, extracts contact, message text, and media info, then saves to Inbox folder.
+
+#### Input
+- WhatsApp Web session (persistent)
+- Phone number/contact name
+- Message text and attachments
+
+#### Prompt Template for Claude
+
+```
+You are analyzing a new WhatsApp message.
+
+MESSAGE DATA:
+- Contact: {{contact_name}} ({{phone_number}})
+- Timestamp: {{timestamp}}
+- Message: {{message_text}}
+- Has Media: {{yes|no}} - {{media_type}}
+
+TASK:
+1. Classify the message:
+   - Personal (family, friends)
+   - Business (work-related, client)
+   - Group (identify group context)
+
+2. Extract intent:
+   - Question (needs reply)
+   - Request (action needed)
+   - Update (informational)
+   - Command (do something)
+
+3. If action requested, identify:
+   - What platform/action is needed
+   - Is this urgent
+   - Do I have permission to proceed
+
+4. Draft a suggested response
+
+OUTPUT FORMAT:
+{
+  "classification": "personal|business|group",
+  "intent": "question|request|update|command",
+  "action_required": true|false,
+  "action_type": "post|reply|schedule|none",
+  "target_platform": "linkedin|facebook|instagram|twitter|none",
+  "requires_approval": true|false,
+  "draft_response": "...",
+  "urgency": "low|medium|high"
+}
+```
+
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_whatsapp_contact.md`
+- Classification and routing recommendation
+
+---
+
+### 3. LinkedIn Watcher Skill
+
+**File:** `linkedin_watcher.py`
+**Domain:** Business
+**Interval:** 60 seconds
+
+#### Description
+Monitors LinkedIn for connection requests, messages, comments, and post engagement. Saves all interactions to Inbox.
+
+#### Input
+- LinkedIn session (persistent)
+- Notifications feed
+- Messages inbox
+
+#### Prompt Template for Claude
+
+```
+You are analyzing a LinkedIn interaction.
+
+INTERACTION DATA:
+- Type: {{message|connection_request|comment|reaction}}
+- From: {{person_name}} - {{person_title}} at {{company}}
+- Content: {{message_text}}
+- Context: {{post_url|profile_url}}
+
+TASK:
+1. Classify the interaction:
+   - Networking (connection, casual message)
+   - Business Opportunity (lead, partnership)
+   - Content Engagement (comment, reaction)
+   - Recruitment (job offer, candidate)
+
+2. Determine response needed:
+   - Accept connection (auto-approve if criteria met)
+   - Reply to message (draft response)
+   - Engage with comment (like, reply)
+   - Escalate to human (opportunity)
+
+3. For connection requests, evaluate:
+   - Same industry → Auto-accept
+   - Recruiter → Review
+   - Sales pitch → Ignore or decline
+
+OUTPUT FORMAT:
+{
+  "interaction_type": "networking|opportunity|engagement|recruitment",
+  "action": "accept|reply|engage|escalate|ignore",
+  "draft_response": "...",
+  "requires_approval": true|false,
+  "opportunity_score": 1-10,
+  "follow_up_date": "YYYY-MM-DD or null"
+}
+```
+
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_linkedin_interaction.md`
+- Action recommendation with draft response
+
+---
+
+### 4. Facebook Watcher Skill
+
+**File:** `fb_ig_browser_watcher.py`
+**Domain:** Business
+**Interval:** 60 seconds
+
+#### Description
+Monitors Facebook for messages, comments, mentions, and post engagement. Uses persistent browser sessions.
+
+#### Input
+- Facebook session (persistent)
+- Messages inbox
+- Notifications feed
+- Comments on posts
+
+#### Prompt Template for Claude
+
+```
+You are analyzing a Facebook interaction.
+
+INTERACTION DATA:
+- Platform: facebook
+- Type: {{message|comment|mention|reaction}}
+- From: {{user_name}} - {{profile_url}}
+- Content: {{message_text}}
+- Post Context: {{post_content}}
+
+TASK:
+1. Classify the interaction:
+   - Customer Inquiry (question about product/service)
+   - Engagement (like, positive comment)
+   - Complaint (negative feedback)
+   - Spam (ignore)
+
+2. Determine response:
+   - Answer question (draft response)
+   - Acknowledge engagement (like back)
+   - Escalate complaint (human review)
+   - Ignore spam
+
+3. For customer inquiries:
+   - Identify product/service mentioned
+   - Draft helpful response
+   - Flag if pricing/info needed from human
+
+OUTPUT FORMAT:
+{
+  "platform": "facebook",
+  "classification": "inquiry|engagement|complaint|spam",
+  "sentiment": "positive|neutral|negative",
+  "action": "reply|acknowledge|escalate|ignore",
+  "draft_response": "...",
+  "requires_approval": true|false,
+  "product_mentioned": "..."
+}
+```
+
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_fb_interaction.md`
+- Response draft for Facebook
+
+---
+
+### 5. Instagram Watcher Skill
+
+**File:** `fb_ig_browser_watcher.py`
+**Domain:** Business
+**Interval:** 60 seconds
+
+#### Description
+Monitors Instagram for DMs, comments, mentions, and story interactions. Uses persistent browser sessions.
+
+#### Input
+- Instagram session (persistent)
+- Direct messages inbox
+- Activity/notifications feed
+- Comments on posts
+
+#### Prompt Template for Claude
+
+```
+You are analyzing an Instagram interaction.
+
+INTERACTION DATA:
+- Platform: instagram
+- Type: {{dm|comment|mention|story_reply}}
+- From: {{user_name}} - {{profile_url}}
+- Content: {{message_text}}
+- Media Context: {{post_image|story}}
+
+TASK:
+1. Classify the interaction:
+   - Customer Inquiry (question about product/service)
+   - Engagement (like, positive comment)
+   - Collaboration Request (influencer, brand)
+   - Spam (ignore)
+
+2. Determine response:
+   - Answer question (draft response)
+   - Acknowledge engagement (like back, follow)
+   - Escalate collaboration (human review)
+   - Ignore spam
+
+3. For visual platforms:
+   - Consider emoji-friendly responses
+   - Keep tone casual but professional
+   - Include relevant hashtags if replying publicly
+
+OUTPUT FORMAT:
+{
+  "platform": "instagram",
+  "classification": "inquiry|engagement|collaboration|spam",
+  "sentiment": "positive|neutral|negative",
+  "action": "reply|acknowledge|escalate|ignore",
+  "draft_response": "...",
+  "requires_approval": true|false,
+  "hashtag_suggestions": ["#..."]
+}
+```
+
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_ig_interaction.md`
+- Response draft for Instagram
+
+---
+
+### 6. X (Twitter) Watcher Skill
+
+**File:** `twitter_browser_watcher.py`
+**Domain:** Business
+**Interval:** 60 seconds
+
+#### Description
+Monitors X (Twitter) for mentions, replies, DMs, and engagement. Tracks brand mentions and conversation threads.
+
+#### Input
+- Twitter session (persistent)
+- Mentions feed
+- DMs
+- Notification feed
+
+#### Prompt Template for Claude
+
+```
+You are analyzing a Twitter/X interaction.
+
+INTERACTION DATA:
+- Type: {{mention|reply|dm|quote_tweet}}
+- From: {{@username}} - {{display_name}}
+- Content: {{tweet_text}}
+- Thread Context: {{parent_tweet}}
+- Engagement: {{likes|retweets|replies}}
+
+TASK:
+1. Classify the interaction:
+   - Brand Mention (organic mention)
+   - Customer Support (question/complaint)
+   - Engagement (reply to our content)
+   - Influencer (high-follower account)
+
+2. Determine response strategy:
+   - Thank for mention
+   - Answer support question
+   - Join conversation
+   - Escalate influencer to human
+
+3. Draft response (280 char limit):
+   - Match tone (professional/casual)
+   - Include relevant hashtags
+   - Tag user if appropriate
+
+OUTPUT FORMAT:
+{
+  "classification": "mention|support|engagement|influencer",
+  "sentiment": "positive|neutral|negative",
+  "action": "reply|thank|escalate|ignore",
+  "draft_response": "...",
+  "char_count": <280,
+  "requires_approval": true|false,
+  "influencer_score": 1-10
+}
+```
+
+#### Output
+- Markdown file in `Inbox/YYYYMMDD_HHMMSS_twitter_interaction.md`
+- Response draft within character limit
+
+---
+
+## Poster Skills
+
+### 7. LinkedIn Poster Skill
+
+**File:** `linkedin_browser_poster.py`
+**Domain:** Business
+**Trigger:** Task from orchestrator
+
+#### Description
+Creates and publishes posts on LinkedIn. Handles text, images, hashtags, and tagging.
+
+#### Input
+- Post content (text)
+- Optional: image path, hashtags, tags
+- Human approval (if required)
+
+#### Prompt Template for Claude
+
+```
+You are creating a LinkedIn post.
+
+INPUT:
+- Topic: {{topic}}
+- Key Points: {{bullet_points}}
+- Call to Action: {{cta}}
+- Image: {{yes|no}} - {{image_path}}
+- Tags: {{@mentions}}
+
+TASK:
+1. Write a LinkedIn-optimized post:
+   - Hook in first 2 lines (before "see more")
+   - 3-5 short paragraphs max
+   - Professional but engaging tone
+   - Include relevant hashtags (3-5)
+   - Add line breaks for readability
+
+2. Optimize for engagement:
+   - Ask a question
+   - Share insight/lesson
+   - Include CTA
+
+3. Character count check:
+   - Max 3000 characters
+   - Ideal: 1300-1500
+
+OUTPUT FORMAT:
+{
+  "post_text": "...",
+  "hashtags": ["#hashtag1", "#hashtag2"],
+  "tags": ["@company1", "@person1"],
+  "character_count": <3000,
+  "image_path": "...",
+  "scheduled_time": null,
+  "ready_to_post": true|false
+}
+```
+
+#### Output
+- Formatted post ready for browser automation
+- Hashtags and tags extracted
+- Character count validated
+
+---
+
+### 8. Facebook/Instagram Poster Skill
+
+**File:** `fb_ig_browser_poster.py`
+**Domain:** Business
+**Trigger:** Task from orchestrator
+
+#### Description
+Posts to Facebook and Instagram simultaneously. Handles text, images, and platform-specific formatting.
+
+#### Input
+- Post content
+- Image path (required for IG)
+- Hashtags
+- Cross-post preference
+
+#### Prompt Template for Claude
+
+```
+You are creating posts for Facebook and Instagram.
+
+INPUT:
+- Topic: {{topic}}
+- Content: {{main_message}}
+- Image: {{image_path}}
+- Hashtags: {{hashtag_list}}
+
+TASK:
+1. Create Facebook version:
+   - Longer form OK (up to 63,206 chars)
+   - Conversational tone
+   - Include link if relevant
+   - 1-3 hashtags
+
+2. Create Instagram version:
+   - Caption max 2,200 chars
+   - Visual-first thinking
+   - Emoji-friendly
+   - 5-15 hashtags (can go in comments)
+
+3. Platform differences:
+   - FB: Links work, text-heavy OK
+   - IG: No links in caption, visual focus
+
+OUTPUT FORMAT:
+{
+  "facebook": {
+    "caption": "...",
+    "hashtags": ["#..."],
+    "include_link": true|false
+  },
+  "instagram": {
+    "caption": "...",
+    "hashtags": ["#..."],
+    "emoji_style": true|false
+  },
+  "image_path": "...",
+  "ready_to_post": true|false
+}
+```
+
+#### Output
+- Platform-specific captions
+- Hashtag sets for each platform
+- Image path confirmed
+
+---
+
+### 9. X (Twitter) Poster Skill
+
+**File:** `twitter_browser_poster.py`
+**Domain:** Business
+**Trigger:** Task from orchestrator
+
+#### Description
+Creates and posts tweets. Handles character limits, threads, images, and hashtags.
+
+#### Input
+- Message content
+- Optional: image, thread context
+- Hashtags
+
+#### Prompt Template for Claude
+
+```
+You are creating a Twitter/X post.
+
+INPUT:
+- Message: {{main_message}}
+- Image: {{yes|no}}
+- Thread: {{yes|no}} - {{context}}
+- Hashtags: {{hashtag_preferences}}
+
+TASK:
+1. Create tweet (280 char limit):
+   - Hook in first 100 chars
+   - Clear message
+   - Strong CTA or insight
+   - 1-2 hashtags max
+
+2. If thread needed:
+   - Break into logical chunks
+   - Each tweet standalone + connected
+   - Number tweets (1/5, 2/5...)
+   - End with summary/CTA
+
+3. Optimize for engagement:
+   - Question or poll
+   - Surprising insight
+   - Timely reference
+
+OUTPUT FORMAT:
+{
+  "single_tweet": {
+    "text": "...",
+    "char_count": <280,
+    "hashtags": ["#..."]
+  },
+  "thread": [
+    {"tweet": 1, "text": "...", "char_count": <280},
+    {"tweet": 2, "text": "...", "char_count": <280}
+  ],
+  "image_path": "...",
+  "ready_to_post": true|false
+}
+```
+
+#### Output
+- Tweet text (within 280 chars)
+- Thread array if multi-tweet
+- Hashtag list
+
+---
+
+## Core Reasoning Skills
+
+### 10. Reasoning Loop Skill (Ralph Wiggum)
+
+**File:** Embedded in all scripts
+**Domain:** All
+**Trigger:** Any task execution
+
+#### Description
+Iterative task completion with retry logic. Continues until TASK_COMPLETE or max iterations.
+
+#### Input
+- Task definition
+- Current iteration state
+- Previous attempt results
+
+#### Prompt Template for Claude
+
+```
+You are in a Ralph Wiggum Loop iteration.
+
+TASK: {{task_description}}
+ITERATION: {{current}} of {{max_iterations}}
+PREVIOUS RESULT: {{result_or_error}}
+
+STATUS OPTIONS:
+- CONTINUE: Need another iteration
+- TASK_COMPLETE: Success, done
+- TASK_FAILED: Cannot complete, give up
+
+TASK:
+1. Evaluate current state:
+   - What was accomplished
+   - What failed
+   - What's remaining
+
+2. Decide next action:
+   - Retry same approach (transient error)
+   - Try different approach (systematic error)
+   - Mark complete (success criteria met)
+   - Mark failed (unrecoverable)
+
+3. If continuing:
+   - What will you try differently
+   - What did you learn
+
+OUTPUT FORMAT:
+{
+  "status": "CONTINUE|TASK_COMPLETE|TASK_FAILED",
+  "iteration": {{current}},
+  "summary": "What happened this iteration",
+  "next_action": "What to try next",
+  "error_recovery": "How to handle the error",
+  "final_result": {...} if TASK_COMPLETE
+}
+```
+
+#### Output
+- Status: CONTINUE, TASK_COMPLETE, or TASK_FAILED
+- Next action recommendation
+- Final result on completion
+
+---
+
+### 11. MCP Action Skill
+
+**File:** `social_mcp.js`, `audit_mcp.py`
+**Domain:** All
+**Trigger:** Action execution
+
+#### Description
+Executes actions via MCP server REST API endpoints.
+
+#### Input
+- MCP server endpoint
+- Action payload
+- Authentication
+
+#### Prompt Template for Claude
+
+```
+You are calling an MCP server endpoint.
+
+MCP DATA:
+- Server: {{social_mcp|audit_mcp}}
+- Endpoint: {{/post-x|/post-fb|/generate_briefing}}
+- Method: {{POST|GET}}
+- Payload: {{json_payload}}
+
+TASK:
+1. Prepare the request:
+   - Validate payload format
+   - Check required fields
+   - Set correct headers
+
+2. Execute the call:
+   - POST with JSON body
+   - Handle response
+   - Check for errors
+
+3. Process response:
+   - Success: Extract result
+   - Error: Determine retry strategy
+   - Timeout: Apply backoff
+
+OUTPUT FORMAT:
+{
+  "request": {
+    "url": "http://localhost:3000/...",
+    "method": "POST",
+    "payload": {...}
+  },
+  "response": {
+    "status": 200|400|500,
+    "body": {...},
+    "error": null|"error message"
+  },
+  "success": true|false,
+  "retry_recommended": true|false
+}
+```
+
+#### Output
+- Request/response details
+- Success/failure status
+- Retry recommendation
+
+---
+
+### 12. Human Approval Skill
+
+**File:** Embedded in `ai_orchestrator.py`
+**Domain:** All
+**Trigger:** Sensitive action detected
+
+#### Description
+Gates sensitive actions requiring human confirmation before execution.
+
+#### Input
+- Action description
+- Risk level
+- Context and draft
+
+#### Prompt Template for Claude
+
+```
+You are determining if human approval is required.
+
+ACTION DATA:
+- Action: {{action_description}}
+- Domain: {{personal|business}}
+- Platform: {{platform_name}}
+- Content: {{post_text|message_draft}}
+- Sender/Context: {{context}}
+
+APPROVAL TRIGGERS (require YES):
+- First-time action on any platform
+- Financial/revenue-related content
+- Account security changes
+- Batch operations (>10 items)
+- New contact (never interacted before)
+- Sensitive topics (legal, HR, medical)
+- Large monetary amounts
+
+AUTO-APPROVE (NO approval needed):
+- Replies to existing conversations
+- Routine engagement (likes, simple comments)
+- Scheduled recurring posts
+- Known contacts (interaction history)
+
+TASK:
+1. Check against approval triggers
+2. If approval needed:
+   - Explain why
+   - Summarize action
+   - Provide approve/reject options
+
+OUTPUT FORMAT:
+{
+  "requires_approval": true|false,
+  "reason": "Why approval is/isn't needed",
+  "risk_level": "low|medium|high",
+  "approval_prompt": "⚠️ SENSITIVE ACTION: ...\nConfirm? (yes/no): ",
+  "auto_approve_override": true|false
+}
+```
+
+#### Output
+- Approval requirement decision
+- Risk level assessment
+- Confirmation prompt if needed
+
+---
+
+### 16. Cross-Domain Routing Skill
+
+**File:** `ai_orchestrator.py`
+**Domain:** All
+**Trigger:** New item in Inbox
+
+#### Description
+Classifies incoming messages as Personal or Business domain and routes to appropriate handlers.
+
+#### Input
+- Message file from Inbox
+- Source identifier (gmail, whatsapp, linkedin, etc.)
+
+#### Prompt Template for Claude
+
+```
+You are routing a message to the correct domain handler.
+
+MESSAGE DATA:
+- Source: {{gmail|whatsapp|linkedin|facebook|instagram|twitter}}
+- Sender: {{sender_info}}
+- Content: {{message_content}}
+- Timestamp: {{timestamp}}
+
+DOMAIN RULES:
+PERSONAL DOMAIN (gmail, whatsapp):
+- Family, friends, personal accounts
+- Non-work related
+- Personal appointments, bills
+
+BUSINESS DOMAIN (linkedin, facebook, instagram, twitter):
+- Work-related communications
+- Client/customer interactions
+- Professional networking
+- Brand mentions, business posts
+
+TASK:
+1. Classify domain:
+   - If source is gmail/whatsapp → Check content
+   - If source is social platform → Business (usually)
+   - Override based on content analysis
+
+2. Route to handler:
+   - Personal → gmail_handler or whatsapp_handler
+   - Business → platform-specific handler
+
+3. Priority assignment:
+   - Urgent keywords → High
+   - Questions → Medium
+   - Informational → Low
+
+OUTPUT FORMAT:
+{
+  "domain": "personal|business",
+  "handler": "gmail|whatsapp|linkedin|fb_ig|twitter",
+  "action_type": "read|reply|post|ignore",
+  "priority": "low|medium|high",
+  "requires_approval": true|false,
+  "confidence": 0.0-1.0
+}
+```
+
+#### Output
+- Domain classification
+- Handler selection
+- Priority and approval flags
+
+---
+
+## Infrastructure Skills
+
+### 13. Weekly Audit Skill
+
+**File:** `weekly_audit.py`
+**Domain:** All
+**Trigger:** Cron (Sundays 9 AM) or manual
+
+#### Description
+Generates weekly CEO briefing by analyzing vault contents.
+
+#### Input
+- Inbox folder contents
+- Needs_Action folder contents
+- Done folder contents
+- Audit_Log.md entries
+
+#### Prompt Template for Claude
+
+```
+You are generating the weekly CEO briefing.
+
+INPUT DATA:
+- Week: {{start_date}} to {{end_date}}
+- Inbox Count: {{inbox_count}}
+- Needs_Action Count: {{action_count}}
+- Done Count: {{done_count}}
+- Audit Log: {{recent_entries}}
+
+ANALYSIS TASKS:
+1. Categorize completed tasks:
+   - Revenue-generating
+   - Customer engagement
+   - Content creation
+   - Administrative
+
+2. Identify bottlenecks:
+   - Items stuck in Needs_Action
+   - Repeated failures
+   - Pending approvals
+
+3. Calculate metrics:
+   - Total tasks processed
+   - Success rate
+   - Average response time
+   - Platform breakdown
+
+OUTPUT FORMAT:
+## Weekly Briefing: {{week_range}}
+
+### 📊 Metrics
+- Tasks Processed: {{count}}
+- Success Rate: {{rate}}%
+- Avg Response Time: {{time}}
+
+### ✅ Completed
+- {{list of completed tasks by category}}
+
+### ⚠️ Needs Attention
+- {{list of stuck/failed items}}
+
+### 📈 Recommendations
+- {{actionable insights}}
+```
+
+#### Output
+- Weekly briefing in `Briefings/YYYYMMDD_weekly_briefing.md`
+- Metrics summary
+- Action items for CEO
+
+---
+
+### 14. Error Recovery Skill
+
+**File:** Embedded in all scripts
+**Domain:** All
+**Trigger:** Any exception
+
+#### Description
+Handles errors with 3-retry exponential backoff and graceful degradation.
+
+#### Input
+- Error details
+- Function that failed
+- Attempt number
+
+#### Prompt Template for Claude
+
+```
+You are handling an error with recovery logic.
+
+ERROR DATA:
+- Function: {{function_name}}
+- Error: {{error_message}}
+- Attempt: {{attempt}} of {{max_retries}}
+- Error Type: {{TimeoutError|ConnectionError|ElementNotFound|etc}}
+
+RECOVERY STRATEGY:
+1. Transient Errors (retry):
+   - TimeoutError
+   - ConnectionError
+   - NetworkError
+   - RateLimitError
+
+2. Permanent Errors (skip after retries):
+   - ElementNotFound (after 3 tries)
+   - AuthenticationError
+   - PermissionError
+
+3. Backoff Calculation:
+   - Attempt 1: Wait 2 seconds
+   - Attempt 2: Wait 4 seconds
+   - Attempt 3: Wait 8 seconds
+
+TASK:
+1. Classify error type
+2. Determine if retry makes sense
+3. Calculate backoff delay
+4. Log error for audit
+
+OUTPUT FORMAT:
+{
+  "error_type": "transient|permanent",
+  "action": "retry|skip|escalate",
+  "backoff_seconds": 2|4|8,
+  "attempt": {{current_attempt}},
+  "max_attempts": 3,
+  "log_entry": "### [timestamp] ERROR: ...",
+  "final_decision": "Retry or graceful skip"
+}
+```
+
+#### Output
+- Error classification
+- Retry decision
+- Backoff delay
+- Audit log entry
+
+---
+
+### 15. Logging Skill
+
+**File:** `audit_logger.py` (embedded)
+**Domain:** All
+**Trigger:** Every action/event
+
+#### Description
+Logs all actions, errors, and decisions to Audit_Log.md with timestamps.
+
+#### Input
+- Event type
+- Task ID
+- Status
+- Details
+
+#### Prompt Template for Claude
+
+```
+You are creating an audit log entry.
+
+EVENT DATA:
+- Task ID: {{task_id}}
+- Action: {{action_type}}
+- Domain: {{personal|business}}
+- Status: {{SUCCESS|FAILED|RETRY}}
+- Details: {{additional_context}}
+- Timestamp: {{ISO_timestamp}}
+
+LOG FORMAT RULES:
+- Use Markdown headers (###)
+- Include ISO timestamp
+- List key-value pairs
+- Separate entries with ---
+- Use emoji indicators (✅ ⚠️ ❌ 🔄)
+
+TASK:
+1. Format the log entry
+2. Append to Audit_Log.md
+3. Ensure atomic writes (no corruption)
+
+OUTPUT FORMAT:
+{
+  "log_entry": "### [{{timestamp}}] {{emoji}} {{status}}: {{task_id}}\n\n- **Action**: {{action}}\n- **Domain**: {{domain}}\n- **Status**: {{status}}\n- **Details**: {{details}}\n\n---\n",
+  "file_path": "Audit_Log.md",
+  "entry_type": "task|error|approval|audit",
+  "emoji": "✅|❌|⚠️|🔄"
+}
+```
+
+#### Output
+- Formatted log entry
+- File path for append
+- Entry type classification
+
+---
+
+### 17. Scheduling Skill (Cron)
+
+**File:** `setup_cron.py`
+**Domain:** All
+**Trigger:** Manual setup or deployment
+
+#### Description
+Sets up cron jobs for automated scheduling of watchers, posters, and audits.
+
+#### Input
+- Script paths
+- Schedule intervals
+- Environment configuration
+
+#### Prompt Template for Claude
+
+```
+You are configuring cron jobs for the AI Employee system.
+
+AVAILABLE JOBS:
+1. Watchers (every minute):
+   - gmail_watcher.py
+   - whatsapp_watcher.py
+   - linkedin_watcher.py
+   - fb_ig_browser_watcher.py
+   - twitter_browser_watcher.py
+
+2. Posters (daily at 9 AM):
+   - linkedin_browser_poster.py
+   - fb_ig_browser_poster.py
+   - twitter_browser_poster.py
+
+3. Audit (weekly, Sunday 8 AM):
+   - weekly_audit.py
+
+4. Orchestrator (every 5 minutes):
+   - ai_orchestrator.py
+
+TASK:
+1. Generate crontab entries
+2. Validate paths
+3. Set up logging redirection
+4. Configure environment variables
+
+OUTPUT FORMAT:
+# AI Employee Vault - Cron Jobs
+# Generated: {{timestamp}}
+
+# Watchers - Every minute
+* * * * * cd {{base_path}} && {{python_path}} gmail_watcher.py >> logs/cron.log 2>&1
+
+# Posters - Daily at 9 AM
+0 9 * * * cd {{base_path}} && {{python_path}} linkedin_browser_poster.py >> logs/cron.log 2>&1
+
+# Weekly Audit - Sunday 8 AM
+0 8 * * 0 cd {{base_path}} && {{python_path}} weekly_audit.py >> logs/cron.log 2>&1
+```
+
+#### Output
+- Crontab entries
+- Installation script
+- Verification commands
+
+---
+
+## Quick Reference
+
+### Environment Variables Required
+
 ```bash
-python ai_orchestrator.py
-```
+# Personal Domain
+GMAIL_EMAIL=your@gmail.com
+GMAIL_PASSWORD=your_password
 
----
-
-## Social Media Platform Skills
-
-### 1. Facebook/Instagram (`fb_ig_browser_poster.py`, `fb_ig_browser_watcher.py`)
-
-**Agent Skills:**
-- Persistent browser sessions (`./fb_ig_session`)
-- Human-like typing & mouse movements
-- Image upload support
-- 60s polling for messages/comments
-- Screenshot audit trail
-
-**Credentials:**
-```bash
+# Business Domain
+LINKEDIN_EMAIL=your@email.com
+LINKEDIN_PASSWORD=your_password
 FB_EMAIL=your@email.com
 FB_PASSWORD=your_password
 IG_USERNAME=your_username
 IG_PASSWORD=your_password
-```
-
-**Usage:**
-```bash
-# Post to both platforms
-python fb_ig_browser_poster.py --text "Hello" --image /path/to/img.jpg
-
-# Watch for messages
-python fb_ig_browser_watcher.py --interval 60
-```
-
-### 2. Twitter/X (`twitter_browser_poster.py`, `twitter_browser_watcher.py`)
-
-**Agent Skills:**
-- Persistent browser sessions (`./twitter_session`)
-- Multi-step login handling
-- Tweet composition with media
-- Mention/reply monitoring
-- Ralph Wiggum retry loop
-
-**Credentials:**
-```bash
 TWITTER_EMAIL=your@email.com
 TWITTER_PASSWORD=your_password
-```
-
-**Usage:**
-```bash
-# Post tweet
-python twitter_browser_poster.py --text "Hello World"
-
-# Watch mentions
-python twitter_browser_watcher.py --interval 60
-```
-
----
-
-## Error Recovery System
-
-### Skill: Universal Error Handling
-
-**Implementation:** All scripts
-
-**Features:**
-- **3 Retry Attempts** with exponential backoff (2s, 4s, 8s)
-- **Graceful Skip** on final failure
-- **Error Logging** to Audit_Log.md
-- **Continued Processing** (one failure doesn't stop pipeline)
-
-**Pattern:**
-```python
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-
-def run_with_retry(func, *args):
-    for attempt in range(MAX_RETRIES):
-        try:
-            return func(*args)
-        except Exception as e:
-            if attempt == MAX_RETRIES - 1:
-                log_error(f"Failed after {MAX_RETRIES} attempts: {e}")
-                return None  # Graceful skip
-            time.sleep(RETRY_DELAY * (2 ** attempt))
-```
-
----
-
-## Audit & Logging
-
-### Skill: Comprehensive Audit Trail
-
-**Log File:** `Audit_Log.md`
-
-**Format:**
-```markdown
-### [2026-02-20T22:01:30] TASK: task_001
-
-- **Action**: PROCESS
-- **Domain**: business
-- **Status**: SUCCESS
-- **Details**: Script: linkedin_watcher.py, Retries: 0
-
----
-```
-
-**Logged Events:**
-- ✅ Task start/completion
-- ⚠️ Errors and retries
-- 🔄 Ralph Wiggum iterations
-- 📊 Weekly audit summaries
-- 👤 Human-in-the-loop decisions
-
-**Usage in Scripts:**
-```python
-from audit_logger import AuditLogger
-
-audit = AuditLogger("Audit_Log.md")
-audit.log_task("task_001", "PROCESS", "business", "SUCCESS")
-```
-
----
-
-## Human-in-the-Loop
-
-### Skill: Sensitive Action Confirmation
-
-**Triggers:**
-- First-time login to new platform
-- Large batch operations (>10 items)
-- Financial/revenue-related actions
-- Account security changes
-
-**Implementation:**
-```python
-def confirm_sensitive_action(action: str) -> bool:
-    """Require human confirmation for sensitive actions"""
-    print(f"⚠️  SENSITIVE ACTION: {action}")
-    response = input("Confirm? (yes/no): ")
-    return response.lower() == 'yes'
-```
-
-**Environment Override:**
-```bash
-# Skip confirmations for automated runs
-export AUTO_CONFIRM=true
-```
-
----
-
-## Ralph Wiggum Loop
-
-### Skill: Iterative Task Completion
-
-**Quote:** *"Me fail English? That's unpossible!"*
-
-**Implementation:**
-```python
-class RalphWiggumLoop:
-    def __init__(self, max_iterations=10):
-        self.max_iterations = max_iterations
-        self.current_iteration = 0
-    
-    def next_iteration(self) -> bool:
-        self.current_iteration += 1
-        if self.current_iteration > self.max_iterations:
-            self.fail()
-            return False
-        return True
-    
-    def complete(self):
-        self.status = "TASK_COMPLETE"
-        logger.info("🍩 Ralph Wiggum Loop: 'I did it!'")
-```
-
-**Usage:**
-- Task processing until success
-- Data analysis iterations
-- Retry failed operations
-- Content generation refinement
-
----
-
-## MCP Server Integration
-
-### 1. Social Media MCP (`social_mcp.js`)
-
-**Port:** 3000
-
-**Endpoints:**
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/post-fb` | POST | Post to Facebook |
-| `/post-ig` | POST | Post to Instagram |
-| `/post-x` | POST | Post to Twitter/X |
-| `/post-all` | POST | Post to all platforms |
-| `/health` | GET | Health check |
-
-**Usage:**
-```bash
-curl -X POST http://localhost:3000/post-x \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Hello World"}'
-```
-
-### 2. Audit MCP (`audit_mcp.py`)
-
-**Port:** 3001
-
-**Endpoints:**
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/generate_briefing` | POST | Generate CEO_Briefing.md |
-| `/briefing` | GET | Get current briefing |
-| `/vault-summary` | GET | Summary of vault contents |
-| `/audit` | POST | Run audit |
-| `/health` | GET | Health check |
-
-**Usage:**
-```bash
-curl -X POST http://localhost:3001/generate_briefing
-```
-
----
-
-## Weekly Audit System
-
-### Skill: `weekly_audit.py`
-
-**Schedule:** Every Sunday at 9:00 AM
-
-**Cron Setup:**
-```bash
-# Edit crontab
-crontab -e
-
-# Add line:
-0 9 * * 0 cd /path/to/phase3_gold && source .venv/bin/activate && python weekly_audit.py >> Logs/weekly_audit.log 2>&1
-```
-
-**Process:**
-1. 📂 Read vault (Inbox/Needs_Action/Done)
-2. 🍩 Ralph Wiggum analysis loop
-3. 📊 Categorize (revenue/bottlenecks/tasks)
-4. 📄 Generate CEO_Briefing.md
-5. 📡 Call audit_mcp endpoints
-6. 📝 Log to Audit_Log.md
-
-**Output:**
-- `CEO_Briefing.md` - Executive summary
-- `Audit_Log.md` - Audit trail entry
-
-**Usage:**
-```bash
-# Force run (any day)
-python weekly_audit.py --force
-
-# Normal run (Sundays only)
-python weekly_audit.py
-```
-
----
-
-## File Structure
-
-```
-phase3_gold/
-├── ai_orchestrator.py          # Main orchestrator
-├── weekly_audit.py             # Weekly audit script
-├── fb_ig_browser_poster.py     # FB/IG posting
-├── fb_ig_browser_watcher.py    # FB/IG monitoring
-├── twitter_browser_poster.py   # Twitter posting
-├── twitter_browser_watcher.py  # Twitter monitoring
-├── social_mcp.js               # Social media MCP server
-├── audit_mcp.py                # Audit MCP server
-├── Audit_Log.md                # Audit trail
-├── CEO_Briefing.md             # Executive briefings
-├── Inbox/                      # Incoming messages
-├── Needs_Action/               # Pending items
-├── Done/                       # Completed tasks
-├── Logs/                       # Application logs
-├── Screenshots/                # Visual audit trail
-├── fb_ig_session/              # FB/IG browser sessions
-├── twitter_session/            # Twitter browser sessions
-└── .env                        # Credentials (gitignored)
-```
-
----
-
-## Environment Variables
-
-```bash
-# Facebook
-FB_EMAIL=your_facebook_email
-FB_PASSWORD=your_facebook_password
-
-# Instagram
-IG_USERNAME=your_instagram_username
-IG_PASSWORD=your_instagram_password
-
-# Twitter/X
-TWITTER_EMAIL=your_twitter_email
-TWITTER_PASSWORD=your_twitter_password
 
 # MCP Servers
 MCP_PORT=3000
 AUDIT_MCP_PORT=3001
-AUDIT_MCP_URL=http://localhost:3001
 
-# Automation
-AUTO_CONFIRM=false  # Set true to skip human confirmations
+# Overrides
+AUTO_CONFIRM=false  # Set to true to skip human approval
 ```
 
----
+### Folder Structure
 
-## Quick Start
+```
+phase3_gold/
+├── Inbox/              # New messages to process
+├── Needs_Action/       # Items requiring attention
+├── Done/               # Completed items
+├── Logs/               # Application logs
+├── Audit_Log.md        # Master audit trail
+├── .env                # Environment variables
+└── [scripts]           # All watcher/poster scripts
+```
+
+### Cron Setup Commands
 
 ```bash
-# 1. Setup virtual environment
-python3.13 -m venv .venv
-source .venv/bin/activate
+# View current crontab
+crontab -l
 
-# 2. Install dependencies
-pip install playwright python-dotenv
-playwright install chromium
-npm install
+# Edit crontab
+crontab -e
 
-# 3. Configure credentials
-cp .env.example .env
-# Edit .env with your credentials
+# View cron logs
+tail -f /var/log/syslog | grep CRON
 
-# 4. Start MCP servers (in separate terminals)
-node social_mcp.js &
-python audit_mcp.py &
-
-# 5. Run orchestrator
-python ai_orchestrator.py
-
-# 6. Generate weekly briefing
-python weekly_audit.py --force
+# Test script manually
+python /path/to/script.py --once
 ```
 
 ---
 
-## Health Checks
-
-```bash
-# Check Social MCP
-curl http://localhost:3000/health
-
-# Check Audit MCP
-curl http://localhost:3001/health
-
-# View current briefing
-curl http://localhost:3001/briefing
-```
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Login fails | Check credentials in .env, verify 2FA is disabled |
-| MCP not responding | Start servers: `node social_mcp.js`, `python audit_mcp.py` |
-| Playwright errors | Run `playwright install chromium` |
-| Permission denied | Run `chmod +x *.py *.js` |
-
----
-
-## Gold Tier Capabilities Summary
-
-| Capability | Silver Tier | Gold Tier |
-|------------|-------------|-----------|
-| Platforms | LinkedIn, WhatsApp | + Facebook, Instagram, Twitter/X |
-| Error Recovery | Basic | 3-retry + exponential backoff |
-| Logging | Console | Audit_Log.md + timestamps |
-| Human-in-the-Loop | None | Sensitive action confirmation |
-| Ralph Wiggum Loop | Basic | Full iteration with status |
-| Weekly Audit | Manual | Automated cron + briefing |
-| MCP Servers | None | Social + Audit REST APIs |
-| Cross-Domain | No | Personal vs Business routing |
-
----
-
-*Generated by Gold Tier AI Employee Vault*  
-*Agent Skill: Documentation*
+**End of SKILL.md**

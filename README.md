@@ -1,3 +1,4 @@
+# bronze_phase1
 # File Watcher Test — Easy Method (2 Terminals)
 
 ⚠️ Watcher real-time monitor karta hai, isliye 2 terminals use karne hain.
@@ -84,3 +85,4 @@ Tumhara system:
 ✔ Real-time automation working hai
 
 Ye Phase 1 Bronze ka core requirement hai.
+# source .venv/bin/activate

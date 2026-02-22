@@ -24,7 +24,11 @@ import logging
 import json
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, BrowserContext # type: ignore
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration
 BASE_DIR = Path(__file__).parent
@@ -46,9 +50,10 @@ IG_NOTIFICATIONS_URL = "https://www.instagram.com/accounts/activity/"
 
 # Timing
 POLL_INTERVAL = 60  # seconds
-PAGE_LOAD_TIMEOUT = 60000
-ACTION_TIMEOUT = 30000
-IMPLICIT_WAIT = 3000
+PAGE_LOAD_TIMEOUT = 120000  # 2 minutes for page load
+ACTION_TIMEOUT = 90000  # 90 seconds for actions
+IMPLICIT_WAIT = 10000  # 10 seconds implicit wait
+LOGIN_WAIT = 15  # 15 seconds wait after login click
 
 # Ralph Wiggum Loop
 MAX_RETRIES = 3
@@ -132,28 +137,42 @@ class FacebookWatcher:
     def login(self, email: str, password: str) -> bool:
         """Login to Facebook"""
         logger.info("Logging into Facebook...")
-        
+
         try:
             self.page.goto("https://www.facebook.com/login", timeout=PAGE_LOAD_TIMEOUT)
             time.sleep(IMPLICIT_WAIT / 1000)
-            
+
             # Check if already logged in
-            if "facebook.com" in self.page.url and "login" not in self.page.url:
+            if "facebook.com" in self.page.url and "login" not in self.page.url.lower():
                 logger.info("Already logged in to Facebook")
                 return True
+
+            # Wait for login form to be ready
+            self.page.wait_for_selector('#email', timeout=PAGE_LOAD_TIMEOUT)
             
             # Fill credentials
             self.page.fill('#email', email)
             self.page.fill('#pass', password)
-            
+            time.sleep(2)
+
             # Click login
             self.page.click('button[name="login"]')
+            logger.info("Login button clicked, waiting for page to load...")
+            
+            # Wait longer for login to complete
+            time.sleep(LOGIN_WAIT)
+            
+            # Wait for navigation or network idle
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=PAGE_LOAD_TIMEOUT)
+            except:
+                pass
+            
             time.sleep(5)
-            self.page.wait_for_load_state('networkidle', timeout=PAGE_LOAD_TIMEOUT)
             
-            logger.info("Facebook login completed")
+            logger.info(f"Facebook login completed. Current URL: {self.page.url}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Facebook login failed: {e}")
             return False
@@ -516,16 +535,20 @@ def main():
     
     with sync_playwright() as p:
         # Launch browser in persistent context
-        browser = p.chromium.launch_persistent_context(
+        context = p.chromium.launch_persistent_context(
             user_data_dir=str(SESSION_DIR),
-            headless=False,  # Visible browser
+            headless=False,  # Headless mode
             args=[
                 '--disable-blink-features=AutomationControlled',
-                '--no-sandbox'
-            ]
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--start-maximized'
+            ],
+            timeout=PAGE_LOAD_TIMEOUT
         )
-        
-        browser.contexts[0].set_default_timeout(ACTION_TIMEOUT)
+
+        context.set_default_timeout(ACTION_TIMEOUT)
         
         try:
             # Facebook watcher
@@ -535,8 +558,8 @@ def main():
                 print("\n" + "=" * 40)
                 print("📘 Facebook Watcher")
                 print("=" * 40)
-                
-                fb_page = browser.new_page()
+
+                fb_page = context.new_page()
                 fb_watcher = FacebookWatcher(fb_page)
                 
                 if FB_EMAIL and FB_PASSWORD:
@@ -551,8 +574,8 @@ def main():
                 print("\n" + "=" * 40)
                 print("📷 Instagram Watcher")
                 print("=" * 40)
-                
-                ig_page = browser.new_page()
+
+                ig_page = context.new_page()
                 ig_watcher = InstagramWatcher(ig_page)
                 
                 if IG_USERNAME and IG_PASSWORD:
@@ -602,6 +625,9 @@ def main():
                 
                 # Single run mode
                 if args.once:
+                    logger.info("✅ Single run completed. Browser will stay open for 60 seconds for verification...")
+                    print("✅ Single run completed. Browser will stay open for 60 seconds...")
+                    time.sleep(60)  # Keep browser open for verification
                     break
                 
                 # Wait for next poll
@@ -611,7 +637,7 @@ def main():
         except KeyboardInterrupt:
             print("\n\n👋 Stopping watcher...")
         finally:
-            browser.close()
+            context.close()
     
     # Print summary
     print("\n" + "=" * 60)

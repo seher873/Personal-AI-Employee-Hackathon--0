@@ -24,10 +24,16 @@ if sys.version_info < (3, 13):
     sys.exit(1)
 
 # Configure logging
+log_file = Path("Logs/linkedin_watcher.log")
+log_file.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
 )
 
 # Configuration
@@ -36,9 +42,11 @@ LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "")
 USER_DATA_DIR = "./linkedin_session"
 VAULT_PATH = "./Inbox"
 ERROR_SCREENSHOT = "linkedin_error.png"
-POLL_INTERVAL = 60  # seconds
+POLL_INTERVAL = 90  # seconds (increased for slow connections)
 MAX_RETRIES = 3
-HEADLESS = True  # Set to False for visible browser
+HEADLESS = True  # WSL2 doesn't support visible browser, use headless mode
+BROWSER_TIMEOUT = 90000  # 90 seconds for page loads
+ELEMENT_TIMEOUT = 10000  # 10 seconds for element interactions
 
 # Ensure vault directory exists
 Path(VAULT_PATH).mkdir(parents=True, exist_ok=True)
@@ -87,7 +95,7 @@ def check_new_messages(page):
     """Check for new LinkedIn messages"""
     try:
         # Navigate to messaging page
-        page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=30000)
+        page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT)
         human_like_delay(500, 1000)
 
         # Look for unread indicators
@@ -118,7 +126,7 @@ def check_new_messages(page):
                                 try:
                                     sender_elem = element.locator(sender_selector).first
                                     if sender_elem.count() > 0:
-                                        sender = sender_elem.inner_text(timeout=2000)
+                                        sender = sender_elem.inner_text(timeout=ELEMENT_TIMEOUT)
                                         break
                                 except Exception:
                                     continue
@@ -135,7 +143,7 @@ def check_new_messages(page):
                                 try:
                                     preview_elem = element.locator(preview_selector).first
                                     if preview_elem.count() > 0:
-                                        text = preview_elem.inner_text(timeout=2000)
+                                        text = preview_elem.inner_text(timeout=ELEMENT_TIMEOUT)
                                         break
                                 except Exception:
                                     continue
@@ -151,7 +159,7 @@ def check_new_messages(page):
                                 try:
                                     time_elem = element.locator(time_selector).first
                                     if time_elem.count() > 0:
-                                        message_time = time_elem.inner_text(timeout=2000)
+                                        message_time = time_elem.inner_text(timeout=ELEMENT_TIMEOUT)
                                         break
                                 except Exception:
                                     continue
@@ -186,7 +194,7 @@ def check_new_notifications(page):
     """Check for new LinkedIn notifications"""
     try:
         # Navigate to notifications page
-        page.goto("https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=30000)
+        page.goto("https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT)
         human_like_delay(500, 1000)
 
         # Look for unread notifications
@@ -216,7 +224,7 @@ def check_new_notifications(page):
                                 try:
                                     text_elem = element.locator(text_selector).first
                                     if text_elem.count() > 0:
-                                        text = text_elem.inner_text(timeout=2000)
+                                        text = text_elem.inner_text(timeout=ELEMENT_TIMEOUT)
                                         break
                                 except Exception:
                                     continue
@@ -232,7 +240,7 @@ def check_new_notifications(page):
                                 try:
                                     time_elem = element.locator(time_selector).first
                                     if time_elem.count() > 0:
-                                        notification_time = time_elem.inner_text(timeout=2000)
+                                        notification_time = time_elem.inner_text(timeout=ELEMENT_TIMEOUT)
                                         break
                                 except Exception:
                                     continue
@@ -292,9 +300,11 @@ def linkedin_watcher():
                     storage_state=USER_DATA_DIR + "/storage_state.json" if os.path.exists(USER_DATA_DIR + "/storage_state.json") else None
                 )
                 page = context.new_page()
+                page.set_default_timeout(ELEMENT_TIMEOUT)
+                page.set_default_navigation_timeout(BROWSER_TIMEOUT)
 
                 # Navigate to LinkedIn
-                page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=30000)
+                page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT)
                 human_like_delay(500, 1000)
 
                 # Check if already logged in
@@ -320,7 +330,7 @@ def linkedin_watcher():
                         human_like_delay(1000, 2000)
 
                         # Wait for navigation
-                        page.wait_for_url("https://www.linkedin.com/feed/*", timeout=30000)
+                        page.wait_for_url("https://www.linkedin.com/feed/*", timeout=BROWSER_TIMEOUT)
 
                     except Exception as login_error:
                         logging.error(f"Login error: {login_error}")

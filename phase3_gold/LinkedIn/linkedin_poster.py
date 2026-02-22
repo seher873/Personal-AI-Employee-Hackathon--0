@@ -106,138 +106,232 @@ def login_to_linkedin(page, email, password):
 
 
 def create_post(page, content):
-    """Create and publish a LinkedIn post"""
-    try:
-        logging.info("Creating LinkedIn post...")
-
-        # Navigate to feed
-        page.goto("https://www.linkedin.com/feed/", wait_until="networkidle", timeout=30000)
-        human_like_delay(2000, 3000)
-
-        # Random mouse movement
-        random_mouse_move(page)
-
-        # Click on the post creation box - try multiple approaches
-        post_start_selectors = [
-            'button[aria-label="Start a post"]',
-            '.share-box-feed-entry__trigger',
-            '[data-test-id="share-box-feed-entry-trigger"]',
-            'div.share-box-feed-entry__trigger button',
-            '.artdeco-button--muted'
-        ]
-
-        clicked = False
-        for selector in post_start_selectors:
-            try:
-                elem = page.locator(selector).first
-                if elem.count() > 0:
-                    elem.scroll_into_view_if_needed()
-                    human_like_delay(500, 1000)
-                    elem.click()
-                    human_like_delay(2000, 3000)
-                    clicked = True
-                    logging.info(f"Clicked post creation button with: {selector}")
-                    break
-            except Exception as e:
-                logging.debug(f"Selector {selector} failed: {e}")
-                continue
-
-        if not clicked:
-            logging.error("Could not find post creation button")
-            try:
-                page.screenshot(path=ERROR_SCREENSHOT)
-            except Exception:
-                pass
-            return False
-
-        # Wait for post dialog to appear
-        human_like_delay(1000, 2000)
-
-        # Find the text input field and enter content
-        text_selectors = [
-            'div[contenteditable="true"]',
-            '.ql-editor.textarea',
-            '[aria-label="What do you want to talk about?"]',
-            '.editor-composer__editor div[contenteditable="true"]'
-        ]
-
-        text_entered = False
-        for selector in text_selectors:
-            try:
-                elem = page.locator(selector).first
-                if elem.count() > 0:
-                    elem.scroll_into_view_if_needed()
-                    human_like_delay(500, 1000)
-                    elem.click()
-                    human_like_delay(300, 500)
-
-                    # Select all and delete using keyboard
-                    page.keyboard.press('Control+A')
-                    human_like_delay(200, 400)
-                    page.keyboard.press('Delete')
-                    human_like_delay(300, 500)
-
-                    # Type the content slowly
-                    elem.type(content, delay=30)
-                    human_like_delay(1000, 2000)
-                    text_entered = True
-                    logging.info("Post content entered")
-                    break
-            except Exception as e:
-                logging.debug(f"Text entry failed with {selector}: {e}")
-                continue
-
-        if not text_entered:
-            logging.error("Could not enter post content")
-            try:
-                page.screenshot(path=ERROR_SCREENSHOT)
-            except Exception:
-                pass
-            return False
-
-        # Wait for post to register
-        human_like_delay(1000, 2000)
-
-        # Click the Post button - try multiple selectors
-        post_selectors = [
-            'button:has-text("Post")',
-            'button:has-text("Post now")',
-            '[aria-label="Post"]',
-            '.edit-post-modal button.artdeco-button--primary'
-        ]
-
-        for selector in post_selectors:
-            try:
-                elem = page.locator(selector).first
-                if elem.count() > 0:
-                    elem.scroll_into_view_if_needed()
-                    human_like_delay(500, 1000)
-                    elem.click()
-                    human_like_delay(3000, 5000)
-                    logging.info("Post button clicked")
-                    break
-            except Exception as e:
-                logging.debug(f"Post button {selector} failed: {e}")
-                continue
-
-        # Wait for confirmation
-        human_like_delay(3000, 5000)
-
-        # Check if post was successful (URL should be back to feed)
-        if "feed" in page.url:
-            logging.info("Post published successfully!")
-            return True
-        else:
-            logging.info("Post completed (page state may vary)")
-            return True
-
-    except Exception as e:
-        logging.error(f"Error creating post: {e}")
+    """Create and publish a LinkedIn post with robust 2026 UI fallbacks"""
+    MAX_RETRIES = 4
+    RETRY_DELAY = 5
+    
+    for attempt in range(MAX_RETRIES):
         try:
-            page.screenshot(path=ERROR_SCREENSHOT)
-        except Exception:
-            pass
-        return False
+            logging.info(f"Creating LinkedIn post (attempt {attempt + 1}/{MAX_RETRIES})...")
+
+            # Navigate to feed
+            page.goto("https://www.linkedin.com/feed/", wait_until="networkidle", timeout=30000)
+            human_like_delay(2000, 3000)
+
+            # Wait for feed to load
+            try:
+                logging.info("Waiting for feed to load...")
+                page.wait_for_selector('div.feed-shared-update-v2, div.feed-identity-module', timeout=90000)
+                logging.info("Feed loaded successfully")
+            except Exception as e:
+                logging.warning(f"Feed wait timeout: {e}")
+
+            # Random mouse movement
+            random_mouse_move(page)
+
+            # =========================================
+            # STEP 1: Find and click post box
+            # 2026 UI fallback selectors (in order)
+            # =========================================
+            post_box = None
+            post_box_selectors = [
+                lambda p: p.get_by_placeholder('What do you want to talk about?'),
+                lambda p: p.get_by_placeholder('Start a post'),
+                lambda p: p.locator('div[contenteditable="true"][role="textbox"]'),
+                lambda p: p.locator('div.ql-editor.ql-blank'),
+                lambda p: p.get_by_role('textbox', name='What do you want to talk about?'),
+                lambda p: p.locator('[data-test-id="post-modal-text-area"]'),
+            ]
+
+            logging.info("Searching for post box...")
+            for i, selector_fn in enumerate(post_box_selectors):
+                try:
+                    elem = selector_fn(page)
+                    count = elem.count()
+                    logging.info(f"  Selector {i+1}: Found {count} element(s)")
+                    if count > 0:
+                        post_box = elem.first
+                        logging.info(f"✓ Using selector {i+1} for post box")
+                        break
+                except Exception as e:
+                    logging.debug(f"Selector {i+1} failed: {e}")
+                    continue
+
+            if not post_box or post_box.count() == 0:
+                logging.error("❌ Could not find post box with any selector")
+                page.screenshot(path="post_box_not_found.png")
+                raise Exception("Post box not found")
+
+            # Scroll to element
+            try:
+                post_box.scroll_into_view_if_needed()
+                human_like_delay(500, 1000)
+                logging.info("✓ Scrolled to post box")
+            except Exception as e:
+                logging.warning(f"Scroll warning: {e}")
+
+            # Force focus
+            try:
+                post_box.focus(timeout=10000)
+                logging.info("✓ Focused post box")
+            except Exception:
+                # JS fallback for focus
+                try:
+                    handle = post_box.element_handle(timeout=5000)
+                    page.evaluate("el => el.focus()", handle)
+                    logging.info("✓ Focused post box (JS fallback)")
+                except Exception as e:
+                    logging.warning(f"Focus failed: {e}")
+
+            human_like_delay(500, 1000)
+
+            # Force click
+            try:
+                post_box.click(force=True, timeout=20000)
+                logging.info("✓ Clicked post box")
+            except Exception:
+                # JS fallback for click
+                try:
+                    handle = post_box.element_handle(timeout=5000)
+                    page.evaluate("el => el.click()", handle)
+                    logging.info("✓ Clicked post box (JS fallback)")
+                except Exception as e:
+                    logging.warning(f"Click failed: {e}")
+
+            human_like_delay(1000, 2000)
+
+            # Debug info
+            try:
+                is_focused = post_box.is_focused()
+                logging.info(f"Debug - Post box focused: {is_focused}")
+            except Exception:
+                pass
+
+            # =========================================
+            # STEP 2: Type content slowly
+            # =========================================
+            logging.info("Typing post content...")
+            
+            # Clear existing content first
+            try:
+                page.keyboard.press('Control+A')
+                human_like_delay(200, 400)
+                page.keyboard.press('Delete')
+                human_like_delay(200, 400)
+            except Exception:
+                pass
+
+            # Type character by character for human-like behavior
+            for char in content:
+                try:
+                    post_box.type(char, delay=random.uniform(80, 250))
+                except Exception:
+                    # Fallback to keyboard
+                    page.keyboard.type(char, delay=random.uniform(80, 250))
+            
+            logging.info("✓ Content typed successfully")
+            human_like_delay(1000, 2000)
+
+            # Take screenshot before post
+            try:
+                page.screenshot(path="post_before.png")
+                logging.info("✓ Screenshot saved: post_before.png")
+            except Exception as e:
+                logging.debug(f"Screenshot warning: {e}")
+
+            # =========================================
+            # STEP 3: Wait for Post button to enable
+            # =========================================
+            logging.info("Waiting for Post button to enable...")
+            human_like_delay(5000, 7000)
+
+            # =========================================
+            # STEP 4: Click Post button with fallbacks
+            # =========================================
+            post_button = None
+            post_button_selectors = [
+                lambda p: p.get_by_role('button', name='Post', disabled=False),
+                lambda p: p.locator('button[data-control-name="post_submit"]'),
+                lambda p: p.locator('button span:has-text("Post")'),
+                lambda p: p.get_by_text('Post', exact=False),
+            ]
+
+            logging.info("Searching for Post button...")
+            for i, selector_fn in enumerate(post_button_selectors):
+                try:
+                    elem = selector_fn(page)
+                    if elem.count() > 0:
+                        post_button = elem.first
+                        logging.info(f"✓ Using selector {i+1} for Post button")
+                        break
+                except Exception as e:
+                    logging.debug(f"Post button selector {i+1} failed: {e}")
+                    continue
+
+            if post_button and post_button.count() > 0:
+                try:
+                    post_button.scroll_into_view_if_needed()
+                    human_like_delay(500, 1000)
+                    post_button.click(force=True, timeout=20000)
+                    logging.info("✓ Post button clicked")
+                except Exception:
+                    # JS fallback
+                    try:
+                        handle = post_button.element_handle(timeout=5000)
+                        page.evaluate("el => el.click()", handle)
+                        logging.info("✓ Post button clicked (JS fallback)")
+                    except Exception as e:
+                        logging.warning(f"Post button click failed: {e}")
+            else:
+                logging.warning("Post button not found, trying keyboard fallback...")
+
+            # =========================================
+            # STEP 5: Ultimate fallback - keyboard submit
+            # =========================================
+            human_like_delay(2000, 3000)
+            try:
+                post_box.press('Control+Enter')
+                logging.info("✓ Control+Enter pressed (fallback)")
+            except Exception:
+                try:
+                    post_box.press('Enter')
+                    logging.info("✓ Enter pressed (fallback)")
+                except Exception as e:
+                    logging.warning(f"Keyboard fallback failed: {e}")
+
+            # Take screenshot after post
+            human_like_delay(3000, 5000)
+            try:
+                page.screenshot(path="post_after.png")
+                logging.info("✓ Screenshot saved: post_after.png")
+            except Exception as e:
+                logging.debug(f"Screenshot warning: {e}")
+
+            # Wait for confirmation
+            human_like_delay(3000, 5000)
+
+            # Check if post was successful
+            if "feed" in page.url:
+                logging.info("✓ Post published successfully! (back to feed)")
+                return True
+            else:
+                logging.info("✓ Post completed (page state may vary)")
+                return True
+
+        except Exception as e:
+            logging.error(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < MAX_RETRIES - 1:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error(f"❌ All {MAX_RETRIES} attempts failed")
+                try:
+                    page.screenshot(path=ERROR_SCREENSHOT)
+                except Exception:
+                    pass
+                return False
+    
+    return False
 
 
 def post_to_linkedin(content):
