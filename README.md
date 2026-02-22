@@ -1,88 +1,96 @@
-# bronze_phase1
-# File Watcher Test — Easy Method (2 Terminals)
+# AI Employee Vault - Complete Testing Guide
 
-⚠️ Watcher real-time monitor karta hai, isliye 2 terminals use karne hain.
+## Pre-Testing Setup
 
-🧭 STEP 1 — Terminal 1 kholo (Watcher Run karna hai)
+### Step 1: Install Dependencies
+```bash
+cd /mnt/c/Users/user/Desktop/AI_Employee_Vault/phase3_gold
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+playwright install
+```
 
-# Yahan watcher run hoga jo folder ko watch karega.
+### Step 2: Configure Environment
+```bash
+cp .env.example .env
+nano .env  # Add your credentials
+```
 
-`cd /mnt/c/Users/user/Desktop/AI_Employee_Vault/phase1_bronze/`
+---
 
+## Phase 1 Bronze - File Watcher Test
 
-# Ab watcher run karo:
+**Terminal 1:**
+```bash
+cd ../phase1_bronze/
+timeout 15s python3 Watchers/inbox_watcher.py
+```
 
-`timeout 15s python3 Watchers/inbox_watcher.py`
+**Terminal 2:**
+```bash
+cd ../phase1_bronze/
+echo "# Test Task" > Inbox/test.md
+```
 
-# Iska matlab:
+---
 
-Watcher 15 seconds tak Inbox folder dekhega
+## Phase 2 Silver - Watchers Test
 
-Agar koi new file ayi → detect karega
+```bash
+cd ../phase2_silver/Watchers/
+python gmail_watcher.py
+python inbox_watcher.py
+```
 
-Ab is terminal ko aise hi chhor do
-❌ Isme kuch aur mat likhna.
+---
 
-🧭 STEP 2 — Terminal 2 kholo (Test File Create karni hai)
+## Phase 3 Gold - Full System Test
 
-Naya terminal open karo (important!).
+```bash
+cd ../phase3_gold/
+source .venv/bin/activate
 
-Phir same folder me jao:
+# Test watchers
+python twitter_browser_watcher.py
+python fb_ig_browser_watcher.py
 
-`cd /mnt/c/Users/user/Desktop/AI_Employee_Vault/phase1_bronze/`
+# Test orchestrator
+python ai_orchestrator.py
 
-🧭 STEP 3 — Test File Create karo
+# Test audit
+python weekly_audit.py
+```
 
-# Ab ye command run karo:
+---
 
-echo "# My Test Task
+## MCP Servers Test
 
-This is a sample task for testing.
+```bash
+# Start servers
+node social_mcp.js &
+python audit_mcp.py &
 
-- Task item 1
-- Task item 2" > Inbox/my_task.md
+# Test health
+curl http://localhost:3000/health
+curl http://localhost:3001/health
 
-# Ye kya karega?
+# Stop servers
+pkill -f social_mcp.js
+pkill -f audit_mcp.py
+```
 
-👉 Inbox folder me ek new file banegi:
+---
 
-Inbox/my_task.md
+## Troubleshooting
 
-🧭 STEP 4 — Watcher ka Reaction Dekho (Terminal 1 me)
+| Issue | Solution |
+|-------|----------|
+| Module not found | pip install -r requirements.txt |
+| Playwright missing | playwright install |
+| Login failures | Check .env credentials |
+| Port in use | pkill -f social_mcp.js |
 
-Ab Terminal 1 (jo watcher chal raha tha) me dekho.
+---
 
-Tumhein kuch aisa output milega:
-
-Detected new file: my_task.md
-Processing...
-Duplicate check passed
-
-
-✅ Iska matlab watcher successfully kaam kar raha hai.
-
-🧭 STEP 5 — Confirm File Exist karti hai
-
-# Terminal 2 me run karo:
-
-`ls -la Inbox/`
-
-
-# Tumhein dikhega:
-
-my_task.md
-
-🧭 STEP 6 — Cleanup (Test File Delete)
-rm Inbox/my_task.md
-
-🎯 Expected Result (Teacher ko kya dikhana hai)
-
-Tumhara system:
-
-✔ Folder monitor kar raha hai
-✔ New file detect karta hai
-✔ Duplicate create nahi karta
-✔ Real-time automation working hai
-
-Ye Phase 1 Bronze ka core requirement hai.
-# source .venv/bin/activate
+**Version:** 1.0.0 | **Status:** Gold Tier Production Ready
