@@ -1,0 +1,72 @@
+"""
+Get Page Token Instructions
+"""
+
+print("=" * 60)
+print("How to Get Facebook Page Access Token")
+print("=" * 60)
+
+print("""
+STEP 1: Go to Graph API Explorer
+---------------------------------
+https://developers.facebook.com/tools/explorer/
+
+STEP 2: Select Your App
+-----------------------
+- At the top, select your app: "781070051729264"
+- Or create a new app if needed
+
+STEP 3: Get Page Access Token
+-----------------------------
+1. Click "Get Token" button (top right)
+2. Select "Get Page Access Token"
+3. You'll see a list of your Pages
+4. Select the Page you want to post to
+5. Facebook will ask for permissions - ALLOW all
+
+STEP 4: Add Permissions Manually (if needed)
+--------------------------------------------
+Click "Edit" next to the token and add:
+- pages_manage_posts
+- pages_read_engagement  
+- pages_show_list
+- instagram_basic
+- instagram_content_publish
+
+Then click "Generate Token" again
+
+STEP 5: Copy the Token
+----------------------
+- Copy the long access token string
+- Copy the Page ID (shown in the Page selector)
+- Copy Instagram ID (if connected to Page)
+
+STEP 6: Update .env File
+------------------------
+Replace these values in .env:
+FB_ACCESS_TOKEN=<paste new token here>
+FB_PAGE_ID=<paste page ID here>
+IG_ID=<paste instagram ID here>
+
+IMPORTANT NOTES:
+----------------
+- User Token ≠ Page Token (you need Page Token)
+- Token must be from "Get Page Access Token" option
+- Your Page must have Instagram Business connected for IG posting
+- For production, you'll need App Review approval
+- For testing, you can use token without review (expires in hours)
+
+QUICK TEST TOKEN (Short-term):
+------------------------------
+For immediate testing, you can use the token from Graph Explorer
+but it will expire in ~1 hour. For long-term use, you need to:
+1. Exchange for long-lived token
+2. Submit for App Review
+""")
+
+print("=" * 60)
+print("\nCurrent App ID: 781070051729264")
+print("Business ID: 946431461896338")
+print("\nGo to Graph Explorer now and get your Page Token!")
+print("https://developers.facebook.com/tools/explorer/")
+print("=" * 60)

@@ -13,7 +13,7 @@ from pathlib import Path
 import imaplib
 import email
 from email.header import decode_header
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import schedule
 from dotenv import load_dotenv
 import requests
@@ -39,15 +39,17 @@ class GmailWatcher:
     """Watches Gmail inbox for new emails and triggers reasoning workflows."""
 
     def __init__(self):
-        self.email_address = os.getenv('GMAIL_ADDRESS')
-        self.app_password = os.getenv('GMAIL_APP_PASSWORD')
+        # Support both Silver (GMAIL_ADDRESS) and Gold (GMAIL_EMAIL) tier variable names
+        self.email_address = os.getenv('GMAIL_ADDRESS') or os.getenv('GMAIL_EMAIL')
+        self.app_password = os.getenv('GMAIL_APP_PASSWORD') or os.getenv('GMAIL_PASSWORD')
         self.mcp_server_url = os.getenv('MCP_SERVER_URL', 'http://localhost:3000')
 
         if not self.email_address or not self.app_password:
-            raise ValueError("GMAIL_ADDRESS and GMAIL_APP_PASSWORD must be set in .env file")
+            raise ValueError("GMAIL_ADDRESS/GMAIL_EMAIL and GMAIL_APP_PASSWORD/GMAIL_PASSWORD must be set in .env file")
 
         self.connection = None
-        self.last_check = datetime.now() - timedelta(minutes=1)  # Start by checking last 1 minute
+        # Use timezone-aware datetime (UTC)
+        self.last_check = datetime.now(timezone.utc) - timedelta(minutes=1)  # Start by checking last 1 minute
         logging.info(f"Initialized Gmail watcher for: {self.email_address}")
 
     def connect(self):
@@ -114,25 +116,31 @@ class GmailWatcher:
                 return []
 
         try:
-            # Search for emails received since last check
-            since_date = self.last_check.strftime('%d-%b-%Y')
-            search_criteria = f'(SINCE {since_date})'
-
-            status, messages = self.connection.search(None, search_criteria)
-
-            if status != 'OK':
-                logging.error(f"Search failed: {status}")
+            # Search ALL emails (not just UNSEEN - Gmail auto-marks as read)
+            status, messages = self.connection.search(None, 'ALL')
+            
+            if status != 'OK' or not messages[0]:
+                logging.debug("No emails found")
                 return []
 
             email_ids = messages[0].split()
             recent_emails = []
+            now = datetime.now(timezone.utc)
+            
+            logging.info(f"Total emails in inbox: {len(email_ids)}")
+            logging.info(f"Last check: {self.last_check}")
 
-            for email_id in email_ids:
+            # Process last 30 emails only (for performance)
+            processed = 0
+            for email_id in email_ids[-30:]:
                 try:
-                    # Fetch the email
+                    # Fetch the email with timeout
+                    self.connection.sock.settimeout(5)  # 5 second timeout
                     status, msg_data = self.connection.fetch(email_id, '(RFC822)')
+                    self.connection.sock.settimeout(None)  # Reset timeout
 
                     if status != 'OK':
+                        logging.warning(f"Fetch failed for email {email_id}")
                         continue
 
                     # Parse email
@@ -144,15 +152,18 @@ class GmailWatcher:
 
                     # Only include emails received after last check time
                     email_time = email.utils.parsedate_to_datetime(msg.get("Date", ""))
-                    if email_time and email_time > self.last_check:
+                    if email_time and email_time > self.last_check and email_time <= now:
                         recent_emails.append(email_content)
+                        logging.info(f"  Found: {email_content['subject']} ({email_time})")
+                        processed += 1
 
                 except Exception as e:
                     logging.error(f"Error processing email {email_id}: {e}")
                     continue
 
-            # Update last check time to now
-            self.last_check = datetime.now()
+            # Update last check time to now (UTC)
+            self.last_check = now
+            logging.info(f"Processed {processed} new emails")
 
             return recent_emails
 
@@ -177,13 +188,18 @@ class GmailWatcher:
             log_file.write(log_entry)
 
     def _convert_email_to_markdown_task(self, email_data):
-        """Convert email to Markdown task file and save to Inbox."""
+        """Convert email to Markdown task file and save to Need_Action folder."""
         try:
             # Create a unique filename based on email and timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             subject_clean = re.sub(r'[^\w\s-]', '', email_data['subject'][:50]).strip()
             filename = f"email_{timestamp}_{subject_clean}.md"
-            filepath = Path(__file__).parent.parent / "Inbox" / filename
+            
+            # Ensure Need_Action folder exists
+            need_action_dir = Path(__file__).parent.parent / "Need_Action"
+            need_action_dir.mkdir(parents=True, exist_ok=True)
+            
+            filepath = need_action_dir / filename
 
             # Create Markdown content from email
             markdown_content = f"""# {email_data['subject']}
@@ -198,12 +214,16 @@ class GmailWatcher:
 {email_data['body']}
 
 ## Action Required
-Please process this email task.
+- [ ] Review and process this email task
+- [ ] Add notes below
 
-## Priority
-Normal
+## Notes
+_Add your notes here_
+
+## Status
+Pending
 """
-            # Write the markdown file to the Inbox
+            # Write the markdown file to Need_Action folder
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(markdown_content.strip())
 

@@ -1,17 +1,6 @@
-# Python 3.13+ required
-# Core dependencies
-watchdog>=3.0.0
-requests
-python-dotenv
+# AI Employee Automation - Phase 3 Gold
+# Stable automation dependencies
 
-# Playwright for browser automation
-playwright==1.44.0
-
-# Scheduling
-schedule==1.2.1
-
-# Google API (optional, for Gmail integration)
-google-api-python-client==2.190.0
-
-# Process management (optional)
-pm2==1.0.0
+playwright>=1.40.0
+python-dotenv>=1.0.0
+requests>=2.31.0

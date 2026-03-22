@@ -646,6 +646,16 @@ flake8 --max-line-length=100 *.py
 
 ### Improvements for Future Versions
 
+#### ✅ Watchdog Process Monitor (COMPLETED)
+Auto-restart failed processes with rate limiting:
+- Monitors all watchers continuously
+- Auto-restart on crash with exponential backoff
+- Rate limiting (max 3 restarts/hour)
+- Human notification on restart
+- PID file tracking
+
+**Files:** `watchdog.py`, `retry_handler.py`
+
 #### 🔮 Web Dashboard
 Replace Obsidian vault with a real web UI:
 - Real-time task status

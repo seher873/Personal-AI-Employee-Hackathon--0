@@ -1,653 +1,361 @@
-#!/usr/bin/env python3
 """
 Facebook & Instagram Browser Watcher
-====================================
-Playwright-based watcher for FB/IG messages and comments
-(no API libs, only Playwright sync)
+Gold Tier - Monitors messages and comments, saves to Inbox
 
-Agent Skills:
-- Browser automation with persistent sessions
-- Message/comment monitoring
-- Inbox saving with timestamped files
-- Ralph Wiggum retry loop
-- Human-like browsing behavior
+Checks every 60 seconds for new messages on Facebook Page and Instagram.
+Saves new messages to Inbox/ folder for processing.
 
 Usage:
-    python fb_ig_browser_watcher.py [--platform fb|ig|both] [--interval 60]
+    py fb_ig_browser_watcher.py
+    py fb_ig_browser_watcher.py --interval 60
 """
 
 import os
 import sys
 import time
 import random
-import logging
 import json
-from pathlib import Path
 from datetime import datetime
-from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Page, BrowserContext # type: ignore
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+except ImportError:
+    print("[ERROR] Playwright not installed. Run: py -m pip install playwright")
+    print("[INFO] Then: playwright install chromium")
+    sys.exit(1)
+
+from config import FB_EMAIL, FB_PASSWORD, IG_USERNAME, IG_PASSWORD
 
 # Configuration
-BASE_DIR = Path(__file__).parent
-SESSION_DIR = BASE_DIR / "fb_ig_session"
-INBOX_DIR = BASE_DIR / "Inbox"
-LOGS_DIR = BASE_DIR / "Logs"
+CHECK_INTERVAL = 60  # seconds
+INBOX_DIR = "./Inbox"
+SESSION_DIR = "./fb_ig_session"
+LOGS_DIR = "./Logs"
 
-# Environment variables
-FB_EMAIL = os.getenv("FB_EMAIL", "")
-FB_PASSWORD = os.getenv("FB_PASSWORD", "")
-IG_USERNAME = os.getenv("IG_USERNAME", "")
-IG_PASSWORD = os.getenv("IG_PASSWORD", "")
-
-# URLs
-FB_MESSAGES_URL = "https://www.facebook.com/messages"
-FB_NOTIFICATIONS_URL = "https://www.facebook.com/notifications"
-IG_MESSAGES_URL = "https://www.instagram.com/direct/inbox/"
-IG_NOTIFICATIONS_URL = "https://www.instagram.com/accounts/activity/"
-
-# Timing
-POLL_INTERVAL = 60  # seconds
-PAGE_LOAD_TIMEOUT = 120000  # 2 minutes for page load
-ACTION_TIMEOUT = 90000  # 90 seconds for actions
-IMPLICIT_WAIT = 10000  # 10 seconds implicit wait
-LOGIN_WAIT = 15  # 15 seconds wait after login click
-
-# Ralph Wiggum Loop
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOGS_DIR / 'fb_ig_watcher.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger('FBIGWatcher')
+# Create directories
+os.makedirs(INBOX_DIR, exist_ok=True)
+os.makedirs(SESSION_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 
-class RalphWiggumLoop:
-    """
-    Agent Skill: Ralph Wiggum Retry Loop
-    "Me fail English? That's unpossible!" - Keeps trying until success
-    """
+class FBIGWatcher:
+    """Facebook and Instagram Message Watcher."""
     
-    def __init__(self, max_retries: int = MAX_RETRIES):
-        self.max_retries = max_retries
-        self.current_retry = 0
+    def __init__(self):
+        self.browser = None
+        self.context = None
+        self.page = None
+        self.last_message_time = None
+        self.message_count = 0
+        self.errors = 0
+        
+    def _log(self, message):
+        """Log message with timestamp."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] {message}"
+        print(log_entry)
+        
+        # Save to log file
+        log_file = os.path.join(LOGS_DIR, f"fb_ig_watcher_{datetime.now().strftime('%Y%m%d')}.log")
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry + "\n")
     
-    def reset(self):
-        self.current_retry = 0
-    
-    def should_retry(self) -> bool:
-        """Check if we should retry"""
-        if self.current_retry < self.max_retries:
-            self.current_retry += 1
-            delay = RETRY_DELAY * (2 ** (self.current_retry - 1))
-            logger.info(f"🍩 Ralph Wiggum Loop: Retry {self.current_retry}/{self.max_retries} in {delay}s")
-            time.sleep(delay)
-            return True
-        logger.error("🍩 Ralph Wiggum Loop: Max retries exhausted")
-        return False
+    def _save_to_inbox(self, source, sender, message_text, message_id=None):
+        """Save message to Inbox folder."""
+        timestamp = datetime.now()
+        filename = f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{source}_{sender.replace('+', '')[:10]}.md"
+        filepath = os.path.join(INBOX_DIR, filename)
+        
+        content = f"""---
+created: {timestamp.isoformat()}
+source: {source}
+sender: {sender}
+status: pending
+message_id: {message_id or 'N/A'}
+---
 
+# Message from {sender}
 
-class HumanLikeBehavior:
-    """
-    Agent Skill: Human-like browsing behavior
-    Makes automation appear more natural
-    """
-    
-    @staticmethod
-    def random_scroll(page: Page, min_pixels: int = 50, max_pixels: int = 300) -> None:
-        """Scroll page with human-like variability"""
-        scroll_amount = random.randint(min_pixels, max_pixels)
-        page.evaluate(f"window.scrollBy(0, {scroll_amount})")
-        time.sleep(random.uniform(0.3, 0.8))
-    
-    @staticmethod
-    def random_delay(min_ms: int = 500, max_ms: int = 2000) -> None:
-        """Random delay between actions"""
-        time.sleep(random.uniform(min_ms, max_ms) / 1000)
-    
-    @staticmethod
-    def mouse_movement(page: Page) -> None:
-        """Simulate natural mouse movement"""
-        viewport = page.viewport_size
-        if viewport:
-            for _ in range(random.randint(3, 7)):
-                x = random.randint(0, viewport['width'])
-                y = random.randint(0, viewport['height'])
-                page.mouse.move(x, y)
-                time.sleep(random.uniform(0.1, 0.3))
+"{message_text}"
 
-
-class FacebookWatcher:
-    """Monitor Facebook messages and comments"""
-    
-    def __init__(self, page: Page):
-        self.page = page
-        self.human = HumanLikeBehavior()
-        self.seen_items = set()
-    
-    def login(self, email: str, password: str) -> bool:
-        """Login to Facebook"""
-        logger.info("Logging into Facebook...")
-
+## Action Required
+- Classify: Business domain
+- Auto-reply: Check keywords
+- Route: Social media response
+"""
+        
         try:
-            self.page.goto("https://www.facebook.com/login", timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(IMPLICIT_WAIT / 1000)
-
-            # Check if already logged in
-            if "facebook.com" in self.page.url and "login" not in self.page.url.lower():
-                logger.info("Already logged in to Facebook")
-                return True
-
-            # Wait for login form to be ready
-            self.page.wait_for_selector('#email', timeout=PAGE_LOAD_TIMEOUT)
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            self._log(f"[INBOX] Saved: {filename}")
+            self.message_count += 1
+            
+            # Save audit log
+            self._save_audit(source, sender, message_text[:100], True)
+            
+        except Exception as e:
+            self._log(f"[ERROR] Failed to save message: {e}")
+            self._save_audit(source, sender, message_text[:100], False, str(e))
+    
+    def _save_audit(self, source, sender, details, success, error=None):
+        """Save audit log entry."""
+        audit_file = os.path.join(LOGS_DIR, "fb_ig_watcher_audit.jsonl")
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "action": "message_detected",
+            "source": source,
+            "sender": sender,
+            "details": details,
+            "success": success,
+            "error": error
+        }
+        
+        with open(audit_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + "\n")
+    
+    def launch_browser(self):
+        """Launch browser with persistent session."""
+        self._log("[BROWSER] Launching Chromium...")
+        
+        playwright = sync_playwright().start()
+        
+        # Launch with persistent user data
+        self.browser = playwright.chromium.launch_persistent_context(
+            user_data_dir=SESSION_DIR,
+            headless=False,  # Show browser for debugging
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox'
+            ]
+        )
+        
+        self._log("[BROWSER] Launched with persistent session")
+    
+    def close_browser(self):
+        """Close browser."""
+        if self.browser:
+            self.browser.close()
+            self._log("[BROWSER] Closed")
+    
+    def check_facebook_messages(self):
+        """Check Facebook Page messages."""
+        self._log("[FB] Checking messages...")
+        
+        try:
+            # Go to Facebook Page inbox
+            page_url = f"https://www.facebook.com/{FB_PAGE_ID}/messages/"
+            
+            self.page = self.browser.new_page()
+            self.page.goto(page_url, timeout=60000)
+            
+            # Wait for page to load
+            self.page.wait_for_timeout(5000)
+            
+            # Check if logged in
+            if "login" in self.page.url.lower():
+                self._log("[FB] Not logged in, attempting login...")
+                self.facebook_login()
+            
+            # Look for message threads
+            try:
+                # Find message threads (selectors may need adjustment)
+                message_threads = self.page.query_selector_all('div[role="row"]')
+                
+                if message_threads:
+                    self._log(f"[FB] Found {len(message_threads)} message threads")
+                    
+                    # Check first few threads for new messages
+                    for thread in message_threads[:5]:
+                        try:
+                            sender_elem = thread.query_selector('span[dir="auto"]')
+                            message_elem = thread.query_selector('span[dir="auto"] + span')
+                            time_elem = thread.query_selector('span[title]')
+                            
+                            if sender_elem and message_elem:
+                                sender = sender_elem.inner_text()
+                                message = message_elem.inner_text()
+                                time_str = time_elem.get_attribute('title') if time_elem else "Unknown"
+                                
+                                # Check if this is a new message
+                                if self.is_new_message(sender, message):
+                                    self._log(f"[FB] New message from {sender}: {message[:50]}...")
+                                    self._save_to_inbox("facebook", sender, message)
+                                    
+                        except Exception as e:
+                            continue  # Skip problematic threads
+                
+                else:
+                    self._log("[FB] No message threads found")
+                    
+            except Exception as e:
+                self._log(f"[FB] Error checking messages: {e}")
+            
+            self.page.close()
+            self._log("[FB] Check complete")
+            
+        except Exception as e:
+            self._log(f"[FB] Error: {e}")
+            self.errors += 1
+    
+    def check_instagram_messages(self):
+        """Check Instagram Direct messages."""
+        self._log("[IG] Checking messages...")
+        
+        try:
+            # Go to Instagram DM
+            page_url = "https://www.instagram.com/direct/inbox/"
+            
+            self.page = self.browser.new_page()
+            self.page.goto(page_url, timeout=60000)
+            
+            # Wait for page to load
+            self.page.wait_for_timeout(5000)
+            
+            # Check if logged in
+            if "login" in self.page.url.lower():
+                self._log("[IG] Not logged in, attempting login...")
+                self.instagram_login()
+            
+            # Look for message threads
+            try:
+                # Find message threads
+                message_threads = self.page.query_selector_all('div[role="listitem"]')
+                
+                if message_threads:
+                    self._log(f"[IG] Found {len(message_threads)} message threads")
+                    
+                    # Check first few threads
+                    for thread in message_threads[:5]:
+                        try:
+                            sender_elem = thread.query_selector('span[dir="auto"]')
+                            message_elem = thread.query_selector('span[dir="auto"] + span')
+                            
+                            if sender_elem and message_elem:
+                                sender = sender_elem.inner_text()
+                                message = message_elem.inner_text()
+                                
+                                if self.is_new_message(sender, message):
+                                    self._log(f"[IG] New message from {sender}: {message[:50]}...")
+                                    self._save_to_inbox("instagram", sender, message)
+                                    
+                        except Exception as e:
+                            continue
+                else:
+                    self._log("[IG] No message threads found")
+                    
+            except Exception as e:
+                self._log(f"[IG] Error checking messages: {e}")
+            
+            self.page.close()
+            self._log("[IG] Check complete")
+            
+        except Exception as e:
+            self._log(f"[IG] Error: {e}")
+            self.errors += 1
+    
+    def facebook_login(self):
+        """Login to Facebook."""
+        try:
+            self.page.goto("https://www.facebook.com/login/", timeout=60000)
+            self.page.wait_for_timeout(3000)
             
             # Fill credentials
-            self.page.fill('#email', email)
-            self.page.fill('#pass', password)
-            time.sleep(2)
-
-            # Click login
-            self.page.click('button[name="login"]')
-            logger.info("Login button clicked, waiting for page to load...")
-            
-            # Wait longer for login to complete
-            time.sleep(LOGIN_WAIT)
-            
-            # Wait for navigation or network idle
-            try:
-                self.page.wait_for_load_state('networkidle', timeout=PAGE_LOAD_TIMEOUT)
-            except:
-                pass
-            
-            time.sleep(5)
-            
-            logger.info(f"Facebook login completed. Current URL: {self.page.url}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Facebook login failed: {e}")
-            return False
-    
-    def check_messages(self) -> list:
-        """
-        Check Facebook messages
-        
-        Agent Skill: Extract message data from page
-        """
-        logger.info("Checking Facebook messages...")
-        messages = []
-        
-        try:
-            self.page.goto(FB_MESSAGES_URL, timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(5)
-            
-            # Human-like scrolling
-            self.human.random_scroll(self.page)
-            
-            # Find message threads
-            message_threads = self.page.locator('div[role="row"]').all()
-            
-            for thread in message_threads[:10]:  # Limit to 10 recent
-                try:
-                    sender = thread.locator('span[dir="auto"]').first.inner_text()
-                    preview = thread.locator('span[dir="auto"]').nth(1).inner_text() if thread.locator('span[dir="auto"]').count() > 1 else ""
-                    timestamp = datetime.now().isoformat()
-                    
-                    message_id = f"fb_msg_{hash(sender + preview)}"
-                    
-                    if message_id not in self.seen_items:
-                        self.seen_items.add(message_id)
-                        messages.append({
-                            'id': message_id,
-                            'source': 'facebook',
-                            'type': 'message',
-                            'sender': sender,
-                            'preview': preview,
-                            'timestamp': timestamp,
-                            'platform': 'facebook'
-                        })
-                except Exception as e:
-                    logger.debug(f"Could not extract message: {e}")
-            
-            logger.info(f"Found {len(messages)} new Facebook messages")
-            
-        except Exception as e:
-            logger.error(f"Error checking Facebook messages: {e}")
-        
-        return messages
-    
-    def check_comments(self) -> list:
-        """
-        Check Facebook comments/notifications
-        
-        Agent Skill: Extract comment data from notifications
-        """
-        logger.info("Checking Facebook comments...")
-        comments = []
-        
-        try:
-            self.page.goto(FB_NOTIFICATIONS_URL, timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(5)
-            
-            # Human-like scrolling
-            self.human.random_scroll(self.page)
-            
-            # Find notifications
-            notifications = self.page.locator('div[role="article"]').all()
-            
-            for notif in notifications[:10]:  # Limit to 10 recent
-                try:
-                    content = notif.inner_text()
-                    timestamp = datetime.now().isoformat()
-                    
-                    # Check if it's a comment
-                    if any(kw in content.lower() for kw in ['commented', 'replied', 'mentioned']):
-                        notif_id = f"fb_comment_{hash(content)}"
-                        
-                        if notif_id not in self.seen_items:
-                            self.seen_items.add(notif_id)
-                            comments.append({
-                                'id': notif_id,
-                                'source': 'facebook',
-                                'type': 'comment',
-                                'content': content,
-                                'timestamp': timestamp,
-                                'platform': 'facebook'
-                            })
-                except Exception as e:
-                    logger.debug(f"Could not extract notification: {e}")
-            
-            logger.info(f"Found {len(comments)} new Facebook comments")
-            
-        except Exception as e:
-            logger.error(f"Error checking Facebook comments: {e}")
-        
-        return comments
-    
-    def take_screenshot(self, filename: str) -> str:
-        """Take screenshot for audit"""
-        screenshots_dir = BASE_DIR / "Screenshots"
-        screenshots_dir.mkdir(parents=True, exist_ok=True)
-        filepath = screenshots_dir / filename
-        self.page.screenshot(path=str(filepath), full_page=True)
-        logger.info(f"Screenshot saved: {filepath}")
-        return str(filepath)
-
-
-class InstagramWatcher:
-    """Monitor Instagram messages and comments"""
-    
-    def __init__(self, page: Page):
-        self.page = page
-        self.human = HumanLikeBehavior()
-        self.seen_items = set()
-    
-    def login(self, username: str, password: str) -> bool:
-        """Login to Instagram"""
-        logger.info("Logging into Instagram...")
-        
-        try:
-            self.page.goto(IG_LOGIN_URL, timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(IMPLICIT_WAIT / 1000)
-            
-            # Check if already logged in
-            if "instagram.com" in self.page.url and "login" not in self.page.url:
-                logger.info("Already logged in to Instagram")
-                return True
-            
-            # Handle cookie consent
-            try:
-                cookie_btn = self.page.locator('button').filter(has_text="Allow all cookies").first
-                if cookie_btn.is_visible():
-                    cookie_btn.click()
-                    time.sleep(2)
-            except:
-                pass
-            
-            # Fill credentials
-            self.page.fill('input[name="username"]', username)
-            self.page.fill('input[name="password"]', password)
+            self.page.fill('#email', FB_EMAIL)
+            self.page.fill('#pass', FB_PASSWORD)
             
             # Click login
             self.page.click('button[type="submit"]')
-            time.sleep(5)
-            self.page.wait_for_load_state('networkidle', timeout=PAGE_LOAD_TIMEOUT)
             
-            # Handle "Save login info"
-            try:
-                not_now = self.page.locator('button').filter(has_text="Not Now").first
-                if not_now.is_visible():
-                    not_now.click()
-                    time.sleep(2)
-            except:
-                pass
+            # Wait for navigation
+            self.page.wait_for_load_state('networkidle')
+            self.page.wait_for_timeout(5000)
             
-            logger.info("Instagram login completed")
-            return True
+            self._log("[FB] Login attempt complete")
             
         except Exception as e:
-            logger.error(f"Instagram login failed: {e}")
-            return False
+            self._log(f"[FB] Login failed: {e}")
+            self.errors += 1
     
-    def check_messages(self) -> list:
-        """
-        Check Instagram direct messages
-        
-        Agent Skill: Extract DM data from page
-        """
-        logger.info("Checking Instagram messages...")
-        messages = []
-        
+    def instagram_login(self):
+        """Login to Instagram."""
         try:
-            self.page.goto(IG_MESSAGES_URL, timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(5)
+            self.page.goto("https://www.instagram.com/accounts/login/", timeout=60000)
+            self.page.wait_for_timeout(5000)
             
-            # Human-like scrolling
-            self.human.random_scroll(self.page)
+            # Fill credentials
+            self.page.fill('input[name="username"]', IG_USERNAME)
+            self.page.fill('input[name="password"]', IG_PASSWORD)
             
-            # Find message threads
-            message_threads = self.page.locator('div[role="listitem"]').all()
+            # Click login
+            self.page.click('button[type="submit"]')
             
-            for thread in message_threads[:10]:  # Limit to 10 recent
-                try:
-                    sender = thread.locator('span[dir="auto"]').first.inner_text()
-                    preview = thread.locator('span[dir="auto"]').nth(1).inner_text() if thread.locator('span[dir="auto"]').count() > 1 else ""
-                    timestamp = datetime.now().isoformat()
-                    
-                    message_id = f"ig_msg_{hash(sender + preview)}"
-                    
-                    if message_id not in self.seen_items:
-                        self.seen_items.add(message_id)
-                        messages.append({
-                            'id': message_id,
-                            'source': 'instagram',
-                            'type': 'message',
-                            'sender': sender,
-                            'preview': preview,
-                            'timestamp': timestamp,
-                            'platform': 'instagram'
-                        })
-                except Exception as e:
-                    logger.debug(f"Could not extract message: {e}")
+            # Wait for navigation
+            self.page.wait_for_load_state('networkidle')
+            self.page.wait_for_timeout(5000)
             
-            logger.info(f"Found {len(messages)} new Instagram messages")
+            self._log("[IG] Login attempt complete")
             
         except Exception as e:
-            logger.error(f"Error checking Instagram messages: {e}")
+            self._log(f"[IG] Login failed: {e}")
+            self.errors += 1
+    
+    def is_new_message(self, sender, message):
+        """Check if message is new (not seen before)."""
+        # Simple implementation: always treat as new
+        # Can be enhanced with message tracking
+        return True
+    
+    def watch(self):
+        """Main watch loop."""
+        self._log("=" * 60)
+        self._log("👁️  FB/IG Watcher Started")
+        self._log(f"[CONFIG] Check interval: {CHECK_INTERVAL}s")
+        self._log(f"[CONFIG] Inbox: {INBOX_DIR}")
+        self._log(f"[CONFIG] Session: {SESSION_DIR}")
+        self._log("=" * 60)
         
-        return messages
-    
-    def check_comments(self) -> list:
-        """
-        Check Instagram comments/notifications
-        
-        Agent Skill: Extract comment data from activity page
-        """
-        logger.info("Checking Instagram comments...")
-        comments = []
-        
-        try:
-            self.page.goto(IG_NOTIFICATIONS_URL, timeout=PAGE_LOAD_TIMEOUT)
-            time.sleep(5)
-            
-            # Human-like scrolling
-            self.human.random_scroll(self.page)
-            
-            # Find notifications
-            notifications = self.page.locator('div[role="listitem"]').all()
-            
-            for notif in notifications[:10]:  # Limit to 10 recent
-                try:
-                    content = notif.inner_text()
-                    timestamp = datetime.now().isoformat()
-                    
-                    # Check if it's a comment
-                    if any(kw in content.lower() for kw in ['comment', 'reply', 'mention', 'tagged']):
-                        notif_id = f"ig_comment_{hash(content)}"
-                        
-                        if notif_id not in self.seen_items:
-                            self.seen_items.add(notif_id)
-                            comments.append({
-                                'id': notif_id,
-                                'source': 'instagram',
-                                'type': 'comment',
-                                'content': content,
-                                'timestamp': timestamp,
-                                'platform': 'instagram'
-                            })
-                except Exception as e:
-                    logger.debug(f"Could not extract notification: {e}")
-            
-            logger.info(f"Found {len(comments)} new Instagram comments")
-            
-        except Exception as e:
-            logger.error(f"Error checking Instagram comments: {e}")
-        
-        return comments
-    
-    def take_screenshot(self, filename: str) -> str:
-        """Take screenshot for audit"""
-        screenshots_dir = BASE_DIR / "Screenshots"
-        screenshots_dir.mkdir(parents=True, exist_ok=True)
-        filepath = screenshots_dir / filename
-        self.page.screenshot(path=str(filepath), full_page=True)
-        logger.info(f"Screenshot saved: {filepath}")
-        return str(filepath)
-
-
-def save_to_inbox(items: list, platform: str) -> list:
-    """
-    Save items to Inbox directory
-    
-    Agent Skill: Persistent message storage
-    """
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
-    saved_files = []
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"new_fb_ig_{timestamp}.md"
-    filepath = INBOX_DIR / filename
-    
-    if not items:
-        return saved_files
-    
-    with open(filepath, 'w') as f:
-        f.write(f"# {platform.capitalize()} Messages/Comments\n\n")
-        f.write(f"## Retrieved: {datetime.now().isoformat()}\n\n")
-        f.write("---\n\n")
-        
-        for item in items:
-            f.write(f"### {item['type'].capitalize()}: {item['id']}\n\n")
-            f.write(f"- **Source**: {item['source']}\n")
-            f.write(f"- **Platform**: {item['platform']}\n")
-            f.write(f"- **Timestamp**: {item['timestamp']}\n")
-            
-            if 'sender' in item:
-                f.write(f"- **Sender**: {item['sender']}\n")
-            if 'preview' in item:
-                f.write(f"- **Preview**: {item['preview']}\n")
-            if 'content' in item:
-                f.write(f"- **Content**: {item['content']}\n")
-            
-            f.write("\n---\n\n")
-    
-    saved_files.append(str(filepath))
-    logger.info(f"Saved {len(items)} items to {filepath}")
-    
-    return saved_files
-
-
-def run_watcher_with_retry(watcher, check_func, platform: str, ralph_loop: RalphWiggumLoop) -> list:
-    """Run watcher function with Ralph Wiggum retry loop"""
-    ralph_loop.reset()
-    
-    while True:
-        try:
-            items = check_func()
-            if items is not None:
-                return items
-        except Exception as e:
-            logger.error(f"{platform} watcher error: {e}")
-        
-        if not ralph_loop.should_retry():
-            logger.error(f"{platform} watcher failed after {ralph_loop.max_retries} retries")
-            return []
-
-
-def main():
-    """Main entry point"""
-    print("=" * 60)
-    print("📱 Facebook & Instagram Browser Watcher")
-    print("=" * 60)
-    
-    # Parse arguments
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--platform', type=str, choices=['fb', 'ig', 'both'], default='both',
-                       help='Platform to monitor')
-    parser.add_argument('--interval', type=int, default=POLL_INTERVAL,
-                       help=f'Polling interval in seconds (default: {POLL_INTERVAL})')
-    parser.add_argument('--once', action='store_true',
-                       help='Run once and exit (no continuous polling)')
-    args = parser.parse_args()
-    
-    print(f"🎯 Platform: {args.platform}")
-    print(f"⏱️  Polling interval: {args.interval}s")
-    print(f"🔄 Single run: {args.once}")
-    print()
-    
-    # Ensure directories exist
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    ralph_loop = RalphWiggumLoop()
-    total_items = 0
-    
-    with sync_playwright() as p:
-        # Launch browser in persistent context
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=str(SESSION_DIR),
-            headless=False,  # Headless mode
-            args=[
-                '--disable-blink-features=AutomationControlled',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--start-maximized'
-            ],
-            timeout=PAGE_LOAD_TIMEOUT
-        )
-
-        context.set_default_timeout(ACTION_TIMEOUT)
+        self.launch_browser()
         
         try:
-            # Facebook watcher
-            fb_page = None
-            fb_watcher = None
-            if args.platform in ['fb', 'both']:
-                print("\n" + "=" * 40)
-                print("📘 Facebook Watcher")
-                print("=" * 40)
-
-                fb_page = context.new_page()
-                fb_watcher = FacebookWatcher(fb_page)
-                
-                if FB_EMAIL and FB_PASSWORD:
-                    fb_watcher.login(FB_EMAIL, FB_PASSWORD)
-                else:
-                    logger.warning("Facebook credentials not set")
-            
-            # Instagram watcher
-            ig_page = None
-            ig_watcher = None
-            if args.platform in ['ig', 'both']:
-                print("\n" + "=" * 40)
-                print("📷 Instagram Watcher")
-                print("=" * 40)
-
-                ig_page = context.new_page()
-                ig_watcher = InstagramWatcher(ig_page)
-                
-                if IG_USERNAME and IG_PASSWORD:
-                    ig_watcher.login(IG_USERNAME, IG_PASSWORD)
-                else:
-                    logger.warning("Instagram credentials not set")
-            
-            # Main polling loop
-            iteration = 0
             while True:
-                iteration += 1
-                logger.info(f"\n📊 Polling iteration #{iteration}")
-                print(f"\n{'=' * 60}")
-                print(f"📊 Polling #{iteration} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print('=' * 60)
-                
-                all_items = []
-                
                 # Check Facebook
-                if fb_watcher and args.platform in ['fb', 'both']:
-                    messages = run_watcher_with_retry(fb_watcher, fb_watcher.check_messages, 'Facebook', ralph_loop)
-                    comments = run_watcher_with_retry(fb_watcher, fb_watcher.check_comments, 'Facebook', ralph_loop)
-                    all_items.extend(messages + comments)
-                    
-                    # Screenshot periodically
-                    if iteration % 10 == 0:
-                        fb_watcher.take_screenshot(f"fb_watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                self.check_facebook_messages()
+                
+                # Wait a bit
+                time.sleep(10)
                 
                 # Check Instagram
-                if ig_watcher and args.platform in ['ig', 'both']:
-                    messages = run_watcher_with_retry(ig_watcher, ig_watcher.check_messages, 'Instagram', ralph_loop)
-                    comments = run_watcher_with_retry(ig_watcher, ig_watcher.check_comments, 'Instagram', ralph_loop)
-                    all_items.extend(messages + comments)
-                    
-                    # Screenshot periodically
-                    if iteration % 10 == 0:
-                        ig_watcher.take_screenshot(f"ig_watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                self.check_instagram_messages()
                 
-                # Save to inbox
-                if all_items:
-                    platform_name = args.platform if args.platform != 'both' else 'fb_ig'
-                    saved_files = save_to_inbox(all_items, platform_name)
-                    total_items += len(all_items)
-                    print(f"✅ Saved {len(all_items)} new items to inbox")
-                else:
-                    print("ℹ️  No new items")
-                
-                # Single run mode
-                if args.once:
-                    logger.info("✅ Single run completed. Browser will stay open for 60 seconds for verification...")
-                    print("✅ Single run completed. Browser will stay open for 60 seconds...")
-                    time.sleep(60)  # Keep browser open for verification
-                    break
-                
-                # Wait for next poll
-                print(f"⏳ Waiting {args.interval}s for next poll...")
-                time.sleep(args.interval)
+                # Wait until next check
+                self._log(f"[WAIT] Next check in {CHECK_INTERVAL} seconds...")
+                time.sleep(CHECK_INTERVAL)
                 
         except KeyboardInterrupt:
-            print("\n\n👋 Stopping watcher...")
+            self._log("[STOP] User interrupted")
+        except Exception as e:
+            self._log(f"[ERROR] Watcher crashed: {e}")
+            self.errors += 1
         finally:
-            context.close()
-    
-    # Print summary
-    print("\n" + "=" * 60)
-    print("📊 Summary:")
-    print(f"  Total items collected: {total_items}")
-    print(f"  Inbox directory: {INBOX_DIR}")
-    print("=" * 60)
-    
-    return 0
+            self.close_browser()
+            self._log("=" * 60)
+            self._log(f"📊 Stats: {self.message_count} messages, {self.errors} errors")
+            self._log("=" * 60)
 
 
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="FB/IG Message Watcher")
+    parser.add_argument("--interval", type=int, default=CHECK_INTERVAL, help="Check interval in seconds")
+    args = parser.parse_args()
+    
+    CHECK_INTERVAL = args.interval
+    
+    watcher = FBIGWatcher()
+    watcher.watch()

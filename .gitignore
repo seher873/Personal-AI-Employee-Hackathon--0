@@ -8,3 +8,54 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+env/
+myenv/
+
+# Environment files (sensitive)
+.env
+.env.*
+!.env.example
+*.env
+
+# Session files
+*.json
+token.json
+credentials.json
+gmail_session/
+whatsapp_session/
+
+# Logs
+*.log
+Logs/
+
+# Screenshots and images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+pictures/
+
+# HTML test files
+*.html
+
+# Batch files
+*.bat
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
