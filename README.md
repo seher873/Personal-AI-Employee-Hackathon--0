@@ -9,8 +9,8 @@ A multi-phase AI-powered employee automation system for social media management,
 | Phase | Tier | Status | Approach |
 |-------|------|--------|----------|
 | Phase 1 | Bronze | ✅ Working | File Watcher |
-| Phase 2 | Silver | ✅ Working | Gmail + LinkedIn + WhatsApp |
-| Phase 3 | Gold | ✅ Working | **API-Based** (Facebook, Instagram, WhatsApp) |
+| Phase 2 | Silver | ✅ Working | Gmail + LinkedIn (Browser) + WhatsApp (Browser) |
+| Phase 3 | Gold | ✅ Working | **FB/IG API** + LinkedIn (Browser) + WhatsApp (Browser) |
 
 ---
 
@@ -90,42 +90,72 @@ AI_Employee_Vault/
 
 ---
 
-## 🎯 Phase 3 Gold - API-Based Posting (Recommended)
+## 🎯 Phase 3 Gold - Social Media Automation
 
-### Why API-Based?
+### Approach Summary
 
-| Feature | Old (Playwright) | New (API) |
-|---------|------------------|-----------|
-| Reliability | ⚠️ Breaks with UI changes | ✅ Stable |
-| Speed | 🐌 Slow (browser) | ⚡ Fast (direct) |
-| Login Issues | ❌ Common | ✅ None |
-| Session Management | 🔧 Manual | ✅ Automatic |
+| Platform | Method | Status |
+|----------|--------|--------|
+| **Facebook** | ✅ API-Based | Production Ready |
+| **Instagram** | ✅ API-Based | Production Ready |
+| **LinkedIn** | 🔵 Browser (Playwright) | Working |
+| **WhatsApp** | 🔵 Browser (Playwright) | Working |
+
+### Why Mixed Approach?
+
+| Platform | Reason |
+|----------|--------|
+| **Facebook/Instagram** | API stable, reliable, no browser issues |
+| **LinkedIn** | API limited, browser automation more flexible |
+| **WhatsApp** | Business API requires approval, browser works immediately |
 
 ### Quick Commands
+
+#### Facebook/Instagram (API-Based)
 
 ```bash
 cd phase3_gold
 
-# 1. Test API credentials
+# Test API credentials
 python test_api_credentials.py
 
-# 2. Make a test post
+# Make a test post
 python quick_test_post.py
 
-# 3. Post custom content
+# Post custom content (Facebook)
 python social_post_watcher.py --post "Your message here"
 
-# 4. Post with image (Facebook + Instagram)
+# Post with image (Facebook + Instagram)
 python social_post_watcher.py --post "Message" --image "path/to/image.png" --platforms facebook instagram
+```
 
-# 5. Send WhatsApp message
-python social_post_watcher.py --post "Message" --whatsapp-to +1234567890
+#### LinkedIn (Browser-Based)
 
-# 6. Run automated watch mode
-python social_post_watcher.py --watch --interval 60
+```bash
+cd phase3_gold
+
+# Post to LinkedIn (browser automation)
+python linkedin_auto_post.py
+
+# Or use the skill directly
+python Skills/skill_linkedin.py
+```
+
+#### WhatsApp (Browser-Based)
+
+```bash
+cd phase3_gold
+
+# Monitor WhatsApp messages
+python Skills/skill_whatsapp.py
+
+# Or send message
+python whatsapp_autoreply.py
 ```
 
 ### Required Credentials
+
+#### For Facebook/Instagram (API)
 
 Add to `phase3_gold/.env`:
 
@@ -136,29 +166,49 @@ FB_PAGE_ID=your_page_id
 
 # Instagram API
 IG_ID=your_instagram_business_id
+```
 
-# WhatsApp API (optional)
-WHATSAPP_PHONE=your_phone_number_id
-WHATSAPP_API_KEY=your_api_key
+#### For LinkedIn (Browser)
+
+```env
+LINKEDIN_EMAIL=your-email@example.com
+LINKEDIN_PASSWORD=your-password
+```
+
+#### For WhatsApp (Browser)
+
+```env
+# No credentials needed - QR code login
 ```
 
 ### Get Your Credentials
 
-1. **Facebook/Instagram:**
+1. **Facebook/Instagram API:**
    - Visit: https://developers.facebook.com/tools/explorer/
    - Generate token with: `pages_manage_posts`, `instagram_content_publish`
    - Get Page ID from your Facebook Page
+   - Get Instagram Business ID from Meta Business Suite
 
-2. **Instagram Business ID:**
-   - Run: `python find_ig_id.py`
-   - Or find in Meta Business Suite
+2. **LinkedIn (Browser):**
+   - Use your regular LinkedIn email/password
+   - First run will require QR code or 2FA verification
 
-3. **WhatsApp Business API:**
-   - Set up at: https://developers.facebook.com/docs/whatsapp
+3. **WhatsApp (Browser):**
+   - Open WhatsApp Web
+   - Scan QR code with your phone
+   - Session saved for future use
 
 ---
 
 ## 📧 Phase 2 Silver - Email + LinkedIn
+
+### Browser-Based Automation
+
+| Platform | Method | Script |
+|----------|--------|--------|
+| Gmail | OAuth + IMAP | `Watchers/gmail_watcher.py` |
+| LinkedIn | Playwright | `linkedin_auto_post.py` |
+| WhatsApp | Playwright | `Watchers/whatsapp_*.py` |
 
 ```bash
 cd phase2_silver
@@ -166,8 +216,11 @@ cd phase2_silver
 # Test Gmail watcher
 python Watchers/gmail_watcher.py
 
-# Test LinkedIn auto-post
+# Test LinkedIn auto-post (browser)
 python linkedin_auto_post.py
+
+# Test WhatsApp (browser - QR login)
+python Watchers/whatsapp_working.py
 
 # Run weekly audit
 python weekly_audit.py
@@ -218,7 +271,7 @@ All activity is logged to:
 
 ## ⚠️ Important Notes
 
-### Instagram Images
+### Instagram Images (API)
 Instagram API requires **public URLs** for images. Local file paths won't work.
 
 **Solutions:**
@@ -226,11 +279,21 @@ Instagram API requires **public URLs** for images. Local file paths won't work.
 2. Use a public web server
 3. Use browser-based skill as fallback
 
-### Token Expiry
+### Facebook Token Expiry (API)
 Facebook access tokens expire. If posting fails:
 1. Generate new token at Facebook Developer Explorer
 2. Update `.env` file
 3. Restart your script
+
+### LinkedIn Browser Session
+- First run requires login/2FA
+- Session saved in `phase3_gold/linkedin_session/`
+- Clear session if login issues: delete session folder
+
+### WhatsApp Browser Session
+- QR code login required on first run
+- Session saved in `phase3_gold/whatsapp_session/`
+- Keep phone connected to internet
 
 ---
 
