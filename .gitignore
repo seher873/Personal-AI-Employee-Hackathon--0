@@ -18,6 +18,10 @@ myenv/
 !.env.example
 *.env
 
+# Test files (may contain sensitive credentials)
+**/test_*.py
+**/*test*.py
+
 # Session files
 *.json
 token.json
